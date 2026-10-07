@@ -1,0 +1,79 @@
+﻿System Design
+PS:
+Students learning software development often struggle to understand large and unfamiliar codebases. While they can access thousands of open-source projects on GitHub, understanding how these projects are structured, how different modules interact, and how the overall application works is challenging. They spend hours reading source files, watching tutorials, or searching online to understand the implementation. Most repositories also lack beginner-friendly documentation, making the learning process slow and frustrating.
+1.Create account for each user ,allocate some space to each user.So,user can store their previous chat ,repo diagram and something.
+2.User enter the github url or upload project zip file.validate the url or the file.
+3.clone the repo,(limit the number of file and size or else someone upload very big size and attack). dont wait for full files to fetch use reddis.
+4.go through every file and folder and each module and method .
+	Skip unwanted folder or file like:
+		Node_modules,target,build,dist,.git etc.dont see env ask access to user or request the file if given use or donΓÇÖt use.
+5.inspect pom,package,requirements,readme,build,docker etc, to detect the teck stack and tools used and create percentage of each language or tools used.
+6.parse the code into ast syntax tree using tree sitter.
+	Fro ex;
+{
+    "id": "class_193",
+    "name": "UserController",
+    "file": "UserController.java",
+    "type": "CONTROLLER",
+    "methods": [
+        "getUser"
+    ],
+    "dependencies": [
+        "UserService"
+    ]
+}
+7.extract everything important and usefull 
+8.detectmine the relationship graph by parsing recusively and create dependency graph;
+UserController ΓöÇΓöÇDEPENDS_ONΓöÇΓöÇ> UserService
+UserService ΓöÇΓöÇDEPENDS_ONΓöÇΓöÇ> UserRepository
+UserRepository ΓöÇΓöÇUSESΓöÇΓöÇ> User
+9.analyze all api endpoints and store.
+10.create database schema and analyze the structure,cardinality ,relationship,constraints,datatype etc.
+11.Now identify each modules like:
+		1.users/
+		2.product/
+		3.order/
+12.Now very important create a complete knowledge graph.and store all required files same as the structure given and show that  in frontend so user should click and see the file but should not able to modify anything.
+13.now create semantic chunck for each method inside each module and for each module separate for each layer like controller,service repo etc ..so we need create chunck like user.usercontroller,user.userservice like that each.
+14.Generate embeddings for each chunkc and store it in vector database.
+15.Now we have two brains:
+	1.Knowledge graph,
+	2.vector data.
+	Also we have each file with code
+16.so now if user ask any question use knowledge graph or vector database and fetch required data  and give it to any llm to generate answer and show it in frontend chat.
+17.generate architecture diagram using knowledge graph as image also schema as image.
+Tech Stack:
+As of now just for spring boot + react project you implement this.
+There should be very nice ui for frontend and each code file use different color to show code class function method variable etc.like in code editors.
+What you need to do | What to use
+Frontend | React.js
+Backend / REST API | Spring Boot
+User login & authentication | Spring Security + JWT
+Store users, projects, metadata | PostgreSQL
+GitHub repository download/clone | JGit
+ZIP upload & extraction | Java/Python ZIP libraries
+Background repository processing | Redis
+Read every file/folder | Python
+Skip node_modules, target, .git, etc. | Python
+Detect technology stack | Python + Rules
+Parse source code | Tree-sitter
+Parse Java | tree-sitter-java
+Parse Python | tree-sitter-python
+Parse JavaScript | tree-sitter-javascript
+Extract classes/methods/imports | Tree-sitter + Python
+Find code dependencies | Tree-sitter + Python
+Build dependency graph | NetworkX
+Store project knowledge/relationships | PostgreSQL initially
+Create semantic code chunks | Python
+Generate embeddings | OpenAI Embeddings OR Sentence Transformers
+Store/search embeddings | PostgreSQL + PGVector
+AI workflow / agents | LangGraph
+Understand user question | GPT / Gemini
+Search relevant code | PGVector
+Search relationships | Knowledge Graph / NetworkX
+Combine retrieved information | Python / LangGraph
+Generate explanation | GPT / Gemini
+Show source code | Monaco Editor
+Architecture diagram | React Flow
+Database / ER diagram | React Flow
+Store repository files | Local Storage initially / MinIO later
