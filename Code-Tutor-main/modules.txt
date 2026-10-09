@@ -1,0 +1,42 @@
+| #  | Module                         | What you need to build                                                                                               |
+| -- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1  | **User Authentication**        | Register/login users. Store user details securely.                                                                   |
+| 2  | **JWT Security**               | Generate JWT after login and protect backend APIs using Spring Security.                                             |
+| 3  | **Project Management**         | Create a project, store project name, owner, status, repository information.                                         |
+| 4  | **GitHub Repository Input**    | Accept a GitHub URL and validate whether it is a valid repository.                                                   |
+| 5  | **ZIP Upload**                 | Allow users to upload a project ZIP and validate size/type.                                                          |
+| 6  | **Repository Extraction**      | Clone GitHub repositories using JGit or extract uploaded ZIP files.                                                  |
+| 7  | **Workspace Manager**          | Create an isolated folder for every project and keep its source code there.                                          |
+| 8  | **File Scanner**               | Recursively scan the repository and identify files/folders.                                                          |
+| 9  | **File Filtering**             | Ignore things like `.git`, `node_modules`, `target`, `build`, `dist`, etc.                                           |
+| 10 | **Technology Detector**        | Inspect `pom.xml`, `package.json`, `requirements.txt`, README, etc. and determine technologies used.                 |
+| 11 | **Java Tree-sitter Parser**    | Parse Java source files into ASTs using Tree-sitter.                                                                 |
+| 12 | **Code Structure Extractor**   | From AST, extract classes, interfaces, methods, fields, parameters, modifiers, etc.                                  |
+| 13 | **Annotation Extractor**       | Detect annotations such as `@Controller`, `@Service`, `@Repository`, `@Entity`, `@GetMapping`, `@Autowired`.         |
+| 14 | **Import Analyzer**            | Extract imports and determine which project classes/packages depend on each other.                                   |
+| 15 | **Code IR Generator**          | Convert extracted information into your own common JSON structure — your **Code IR**.                                |
+| 16 | **Spring Component Detector**  | Identify Controllers, Services, Repositories, Entities, Configurations, etc.                                         |
+| 17 | **Method Call Analyzer**       | Determine relationships such as `Controller → Service → Repository`.                                                 |
+| 18 | **Relationship Resolver**      | Combine imports, types, method calls and Spring information to determine actual relationships between code elements. |
+| 19 | **Dependency Graph**           | Use NetworkX to construct the graph of classes/modules and their relationships.                                      |
+| 20 | **Graph Storage**              | Store graph nodes and relationships so they can later be queried by the application.                                 |
+| 21 | **API Analyzer**               | Detect REST endpoints such as `GET /users`, `POST /orders`, controllers, HTTP methods and parameters.                |
+| 22 | **Database Analyzer**          | Analyze entities, fields, relationships, primary keys, foreign keys, cardinality and constraints.                    |
+| 23 | **Module Detector**            | Group related code into logical modules such as User, Product, Order, Payment, etc.                                  |
+| 24 | **Repository Explorer API**    | Backend APIs to return folders, files, classes and methods to the frontend.                                          |
+| 25 | **Code Viewer**                | React + Monaco Editor to display source code as read-only code.                                                      |
+| 26 | **Architecture Visualization** | React Flow graph showing Controller → Service → Repository → Entity relationships.                                   |
+| 27 | **Database Visualization**     | Generate an ER-style diagram from the database/entity information.                                                   |
+| 28 | **Code Chunking**              | Break source code into meaningful chunks — preferably method/class/module level rather than arbitrary text chunks.   |
+| 29 | **Embedding Generation**       | Convert code chunks into vector embeddings.                                                                          |
+| 30 | **Vector Database**            | Store embeddings using PostgreSQL + PGVector.                                                                        |
+| 31 | **Semantic Search**            | Given a question, search the vector database for relevant code.                                                      |
+| 32 | **Graph Search**               | Given a question, traverse the dependency/knowledge graph to find related classes and methods.                       |
+| 33 | **Hybrid Retrieval**           | Combine vector search + graph search to create better context for the LLM.                                           |
+| 34 | **LLM Explanation Engine**     | Send retrieved code/graph information to GPT/Gemini and generate beginner-friendly explanations.                     |
+| 35 | **Code Q&A**                   | Build the chat API where users can ask questions about their uploaded codebase.                                      |
+| 36 | **Source References**          | Every answer should identify the relevant file/class/method and preferably line range.                               |
+| 37 | **Click-to-Explain**           | User clicks a class/method/file → backend retrieves its information → LLM generates a short explanation popup.       |
+| 38 | **Flow Analysis**              | Given something like `POST /orders`, determine the execution path through Controller → Service → Repository → DB.    |
+| 39 | **Flow Visualization**         | Convert that execution path into a visual flow diagram.                                                              |
+| 40 | **Chat + Project UI**          | Dashboard, project page, repository explorer, architecture view, chat panel, explanation popup and analysis status.  |
