@@ -125,15 +125,37 @@ public class WorkspaceManagerService {
             return true;
         }
 
+        boolean ok = deleteTree(dir);
+        if (ok) log.info("Successfully deleted workspace directory for project id={}", projectId);
+        return ok;
+    }
+
+    /** Recursively deletes a directory, also removing read-only files (Git pack files on Windows). */
+    public boolean deleteTree(Path dir) {
+        if (!Files.exists(dir)) return true;
         try (Stream<Path> stream = Files.walk(dir)) {
-            stream.sorted(Comparator.reverseOrder())
-                  .map(Path::toFile)
-                  .forEach(File::delete);
-            log.info("Successfully deleted workspace directory for project id={}", projectId);
-            return true;
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                File f = p.toFile();
+                if (!f.delete()) {
+                    f.setWritable(true);
+                    if (!f.delete()) log.debug("Could not delete {}", p);
+                }
+            });
+            return !Files.exists(dir);
         } catch (IOException e) {
-            log.error("Failed to delete workspace directory for project id={}: {}", projectId, e.getMessage(), e);
+            log.error("Failed to delete directory {}: {}", dir, e.getMessage());
             return false;
+        }
+    }
+
+    public Path getRoot() { return workspaceRoot; }
+
+    /** Names of all project-id folders currently on disk (used to sweep orphans after a restart). */
+    public java.util.List<Path> listWorkspaceDirs() {
+        try (Stream<Path> s = Files.list(workspaceRoot)) {
+            return s.filter(Files::isDirectory).toList();
+        } catch (IOException e) {
+            return java.util.List.of();
         }
     }
 }

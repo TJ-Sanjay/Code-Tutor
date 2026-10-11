@@ -78,8 +78,28 @@ public class Project {
     @Column(name = "file_count")
     private Integer fileCount;
 
+    // ─── Analysis summary (so project cards need no analysis file) ─────────
+    @Column(name = "size_bytes")
+    private Long sizeBytes = 0L;
+
+    @Column(name = "class_count")
+    private Integer classCount;
+
+    @Column(name = "endpoint_count")
+    private Integer endpointCount;
+
+    @Column(name = "table_count")
+    private Integer tableCount;
+
+    @Column(name = "module_count")
+    private Integer moduleCount;
+
+    /** Sensitive files (.env, keys…) the owner explicitly allowed us to read, newline separated. */
+    @Column(name = "allowed_sensitive", columnDefinition = "TEXT")
+    private String allowedSensitive;
+
     // ─── Ownership ────────────────────────────────────────────────────────
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id", nullable = false)
     private User owner;
 
@@ -101,6 +121,7 @@ public class Project {
         PENDING,        // Just created, not yet queued
         QUEUED,         // Queued for background processing
         CLONING,        // Cloning/extracting repository
+        EXTRACTING,     // Extracting an uploaded ZIP archive
         SCANNING,       // Scanning files/folders
         PARSING,        // Parsing code (Tree-sitter)
         ANALYZING,      // Building dependency graph, embeddings
@@ -195,6 +216,24 @@ public class Project {
 
     public Integer getFileCount() { return fileCount; }
     public void setFileCount(Integer fileCount) { this.fileCount = fileCount; }
+
+    public Long getSizeBytes() { return sizeBytes == null ? 0L : sizeBytes; }
+    public void setSizeBytes(Long sizeBytes) { this.sizeBytes = sizeBytes; }
+
+    public Integer getClassCount() { return classCount; }
+    public void setClassCount(Integer classCount) { this.classCount = classCount; }
+
+    public Integer getEndpointCount() { return endpointCount; }
+    public void setEndpointCount(Integer endpointCount) { this.endpointCount = endpointCount; }
+
+    public Integer getTableCount() { return tableCount; }
+    public void setTableCount(Integer tableCount) { this.tableCount = tableCount; }
+
+    public Integer getModuleCount() { return moduleCount; }
+    public void setModuleCount(Integer moduleCount) { this.moduleCount = moduleCount; }
+
+    public String getAllowedSensitive() { return allowedSensitive; }
+    public void setAllowedSensitive(String allowedSensitive) { this.allowedSensitive = allowedSensitive; }
 
     public User getOwner() { return owner; }
     public void setOwner(User owner) { this.owner = owner; }
