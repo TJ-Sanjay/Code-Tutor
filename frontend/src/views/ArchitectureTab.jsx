@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Background, BackgroundVariant, Controls, MarkerType, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
-import { Layers, Network, Search } from 'lucide-react';
+import { Boxes, Layers, Network, Search } from 'lucide-react';
 import { get } from '../api';
 import { useWorkspace } from '../pages/wsContext';
 import { dagreLayout, layeredLayout } from '../lib/layout';
@@ -31,7 +31,7 @@ function Inner() {
   const rf = useReactFlow();
   const wrapRef = useRef(null);
   const [graph, setGraph] = useState(null);
-  const [mode, setMode] = useState('layers');
+  const [mode, setMode] = useState('overview');
   const [hidden, setHidden] = useState(DEFAULT_HIDDEN);
   const [moduleFilter, setModuleFilter] = useState('all');
   const [query, setQuery] = useState('');
@@ -133,6 +133,7 @@ function Inner() {
     const q = query.trim();
     const dimmed = (id) => (sel ? !neighbours.has(id) : false);
 
+    if (mode === 'overview') return buildOverview(graph, sel, (id) => setSelected((cur) => (cur === id ? null : id)));
     if (mode === 'modules') return buildModules(graph, model, sel, neighbours);
 
     const lanes = LANES.filter((l) => model.nodes.some((n) => n.layer === l));
@@ -180,7 +181,20 @@ function Inner() {
     return { rfNodes: nodes, rfEdges: edges };
   }, [model, mode, selected, query, width, sameLane, showUses, graph]);
 
-  useEffect(() => { const t = setTimeout(() => rf.fitView({ padding: 0.12, duration: 300 }), 60); return () => clearTimeout(t); }, [mode, hidden, moduleFilter, rfNodes.length, rf]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (mode === 'overview' && wrapRef.current) {
+        // open the high-level view at a readable size (fit to width) — scroll down to move through the layers
+        const w = wrapRef.current.clientWidth;
+        const total = 1370;
+        const zoom = Math.min(1, (w - 60) / total);
+        rf.setViewport({ x: Math.max(20, (w - total * zoom) / 2), y: 92, zoom }, { duration: 300 });
+      } else {
+        rf.fitView({ padding: 0.12, duration: 300 });
+      }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [mode, hidden, moduleFilter, rfNodes.length, rf, width]);
 
   /* ───── selection → explain panel ───── */
   useEffect(() => {
@@ -188,13 +202,16 @@ function Inner() {
     if (!selected) return;
     const n = model?.byId.get(selected);
     let url;
-    if (mode === 'modules' || selected.startsWith('module:')) url = null;
+    if (mode === 'modules' || selected.startsWith('module:') || selected.startsWith('layer:')) url = null;
     else if (n?.type === 'TABLE') url = { kind: 'table', id: n.label };
     else if (n?.type === 'CLASS') url = { kind: 'class', id: n.id };
     else if (selected.startsWith('js:')) {
       const g = model?.nodes.find((x) => x.id === selected);
-      if (g) setDetail({ kind: 'file', title: g.label, subtitle: 'React front-end folder', summary: `${g.count} source files of the React app. They call the backend endpoints shown as links to controllers.`, facts: [], links: [], layer: 'FRONTEND' });
-      return;
+      if (g) {
+        setDetail({ kind: 'file', title: g.label, subtitle: 'React front-end folder', summary: g.count + ' source files of the React app. They call the backend endpoints shown as links to controllers.', facts: [], links: [], layer: 'FRONTEND' });
+        return;
+      }
+      url = { kind: 'file', id: selected.slice(3) };
     }
     if (!url) return;
     get(`/projects/${projectId}/explain`, url).then(setDetail).catch(() => setDetail(null));
@@ -212,7 +229,8 @@ function Inner() {
     <div className="diagram-wrap" ref={wrapRef}>
       <div className="diagram-toolbar">
         <div className="seg">
-          <button className={mode === 'layers' ? 'on' : ''} onClick={() => { setMode('layers'); setSelected(null); }}><Layers size={14} /> Layers</button>
+          <button className={mode === 'overview' ? 'on' : ''} onClick={() => { setMode('overview'); setSelected(null); }}><Layers size={14} /> Overview</button>
+          <button className={mode === 'layers' ? 'on' : ''} onClick={() => { setMode('layers'); setSelected(null); }}><Boxes size={14} /> Detailed</button>
           <button className={mode === 'modules' ? 'on' : ''} onClick={() => { setMode('modules'); setSelected(null); }}><Network size={14} /> Modules</button>
         </div>
         {mode === 'layers' && (
@@ -233,14 +251,15 @@ function Inner() {
           </>
         )}
         <div style={{ flex: 1 }} />
+        {mode === 'overview' && <span className="hint">Requests flow top → bottom · scroll to move · Ctrl + scroll to zoom · click a name for details</span>}
         <div className="toolbar-search"><Search size={14} /><input placeholder="Highlight…" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       </div>
 
       <div className="diagram-canvas">
         <ReactFlow
           nodes={rfNodes} edges={rfEdges} nodeTypes={nodeTypes} colorMode={theme}
-          nodesConnectable={false} minZoom={0.15} maxZoom={1.6} fitView proOptions={{ hideAttribution: true }}
-          onNodeClick={(_, n) => { if (n.type !== 'lane') setSelected(n.id === selected ? null : n.id); }}
+          nodesConnectable={false} minZoom={0.15} maxZoom={1.6} fitView panOnScroll={mode === 'overview'} zoomOnScroll={mode !== 'overview'} proOptions={{ hideAttribution: true }}
+          onNodeClick={(_, n) => { if (n.type !== 'lane' && n.type !== 'lcard') setSelected(n.id === selected ? null : n.id); }}
           onPaneClick={() => setSelected(null)}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid-dot)" />
@@ -248,19 +267,19 @@ function Inner() {
           <DiagramTools containerRef={wrapRef} filename={`${overview.overview.name}-architecture`} />
         </ReactFlow>
 
-        <div className="diagram-legend">
+        {mode === 'layers' && (<div className="diagram-legend">
           <span><i style={{ background: EDGE_STYLE.DEPENDS_ON.color }} />injects / calls</span>
           <span><i className="dashed" style={{ borderColor: EDGE_STYLE.USES.color }} />uses</span>
           <span><i className="dashed" style={{ borderColor: EDGE_STYLE.EXTENDS.color }} />extends</span>
           <span><i className="dashed" style={{ borderColor: EDGE_STYLE.IMPLEMENTS.color }} />implements</span>
           <span><i style={{ background: EDGE_STYLE.MAPS_TO.color }} />maps to table</span>
-        </div>
+        </div>)}
 
         {detail ? (
           <div className="diagram-panel">
             <ExplainCard data={detail} onClose={() => setSelected(null)} onLink={follow} />
           </div>
-        ) : !selected && (
+        ) : !selected && mode !== 'overview' && (
           <div className="diagram-hint">Click any box to see what it does and highlight everything connected to it.</div>
         )}
       </div>
@@ -307,5 +326,87 @@ function buildModules(graph, model, sel, neighbours) {
       labelStyle: { fontSize: 11, fill: 'var(--text)' }, labelBgStyle: { fill: 'var(--bg-card)' },
     };
   });
+  return { rfNodes: nodes, rfEdges: edges };
+}
+
+/* ───────── high-level view: coloured bands stacked in request order ───────── */
+const MAIN_FLOW = ['FRONTEND', 'CONTROLLER', 'SERVICE', 'REPOSITORY', 'ENTITY', 'TABLE'];
+const SUPPORT = ['SECURITY', 'COMPONENT', 'CONFIG', 'APPLICATION', 'DTO', 'MODEL', 'ADVICE', 'EXCEPTION', 'UTIL', 'OTHER'];
+const STEP_VERB = {
+  'FRONTEND|CONTROLLER': 'HTTP requests', 'CONTROLLER|SERVICE': 'calls', 'SERVICE|REPOSITORY': 'queries',
+  'REPOSITORY|ENTITY': 'maps', 'ENTITY|TABLE': 'stored in', 'CONTROLLER|REPOSITORY': 'queries', 'SERVICE|ENTITY': 'uses',
+};
+
+function buildOverview(graph, selected, onPick) {
+  const items = {};
+  const layerOf = new Map();
+  const push = (layer, id, name) => { (items[layer] ||= []).push({ id, name }); layerOf.set(id, layer); };
+  graph.nodes.forEach((n) => {
+    if (n.type === 'CLASS' && n.layer !== 'TEST') push(n.layer, n.id, n.label);
+    else if (n.type === 'TABLE') push('TABLE', n.id, n.label);
+    else if (n.type === 'JSFILE') push('FRONTEND', n.id, n.label);
+  });
+  Object.values(items).forEach((l) => l.sort((a, b) => a.name.localeCompare(b.name)));
+  const main = MAIN_FLOW.filter((l) => items[l]?.length);
+  const support = SUPPORT.filter((l) => items[l]?.length);
+
+  // how many connections link two layers (class → class, class → table, react file → controller)
+  const handler = new Map();
+  graph.edges.filter((e) => e.type === 'HANDLED_BY').forEach((e) => handler.set(e.source, e.target));
+  const counts = new Map();
+  const bump = (a, b) => { if (a && b && a !== b) counts.set(`${a}|${b}`, (counts.get(`${a}|${b}`) || 0) + 1); };
+  graph.edges.forEach((e) => {
+    if (['DEPENDS_ON', 'USES', 'MAPS_TO'].includes(e.type)) bump(layerOf.get(e.source), layerOf.get(e.target));
+    else if (e.type === 'CALLS_API') bump('FRONTEND', layerOf.get(handler.get(e.target)));
+  });
+
+  // estimate how many rows the wrapped name pills need so bands never overlap
+  const rowsFor = (names, area) => {
+    let rows = 1; let used = 0;
+    names.forEach((n) => { const w = n.length * 7.4 + 28; if (used + w > area) { rows++; used = 0; } used += w + 8; });
+    return rows;
+  };
+
+  const BW = 1010; const HEAD = 230; const GAP_Y = 76; const MAX = 24;
+  const nodes = [];
+  let y = 0;
+  main.forEach((l, i) => {
+    const list = items[l];
+    const shown = list.slice(0, MAX);
+    const more = list.length - shown.length;
+    const rows = rowsFor(shown.map((s) => s.name).concat(more > 0 ? ['+ 00 more'] : []), BW - HEAD - 34);
+    const h = Math.max(100, rows * 38 + 30);
+    nodes.push({ id: `layer:${l}`, type: 'band', position: { x: 0, y }, draggable: false,
+      data: { layer: l, count: list.length, items: shown, more, width: BW, height: h, selected, onPick, delay: i * 90 } });
+    y += h + GAP_Y;
+  });
+
+  const SX = BW + 90; const SW = 270;
+  let sy = 0;
+  if (support.length) nodes.push({ id: 'caption:support', type: 'caption', position: { x: SX, y: -34 }, draggable: false, selectable: false, data: { text: 'Supporting parts · used across all layers' } });
+  support.forEach((l, i) => {
+    const list = items[l];
+    const shown = list.slice(0, 7);
+    const more = list.length - shown.length;
+    const rows = rowsFor(shown.map((s) => s.name).concat(more > 0 ? ['+ 00 more'] : []), SW - 32);
+    const h = 78 + rows * 38 + 12;
+    nodes.push({ id: `layer:${l}`, type: 'band', position: { x: SX, y: sy }, draggable: false,
+      data: { layer: l, count: list.length, items: shown, more, width: SW, variant: 'card', selected, onPick, delay: 400 + i * 70 } });
+    sy += h + 22;
+  });
+
+  const edges = [];
+  for (let i = 0; i + 1 < main.length; i++) {
+    const a = main[i]; const b = main[i + 1];
+    const n = counts.get(`${a}|${b}`) || 0;
+    const color = layerColor(b);
+    const verb = STEP_VERB[`${a}|${b}`] || 'uses';
+    edges.push({
+      id: `o${i}`, source: `layer:${a}`, target: `layer:${b}`, sourceHandle: 'b', targetHandle: 't', type: 'default', animated: true,
+      label: n ? `${verb} · ${n}` : verb, labelStyle: { fontSize: 12.5, fill: 'var(--text)', fontWeight: 700 },
+      labelBgStyle: { fill: 'var(--bg-card)', fillOpacity: 1, stroke: color, strokeWidth: 1.5 }, labelBgPadding: [10, 5], labelBgBorderRadius: 12,
+      style: { stroke: color, strokeWidth: 3 }, markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
+    });
+  }
   return { rfNodes: nodes, rfEdges: edges };
 }

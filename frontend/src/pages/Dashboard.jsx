@@ -107,7 +107,7 @@ export default function Dashboard() {
         ) : projects.length === 0 ? (
           <div className="card"><Empty icon={<FolderGit2 size={26} />} title="No projects yet">Paste a GitHub link above (try <code>https://github.com/spring-projects/spring-petclinic</code>) or upload a ZIP of your own project.</Empty></div>
         ) : (
-          <div className="proj-grid">
+          <div className="proj-grid stagger">
             {projects.map((p) => <ProjectCard key={p.id} p={p} onDelete={() => setConfirm(p)} onReanalyze={() => reanalyze(p)} />)}
           </div>
         )}
@@ -126,6 +126,13 @@ export default function Dashboard() {
 }
 
 /* ───────────────────────── import ───────────────────────── */
+function uploadError(err) {
+  const s = err.response?.status;
+  if (s === 413) return 'The file is larger than the 100 MB limit. Tip: leave out node_modules, target and build folders before zipping.';
+  if (!err.response) return err.code === 'ERR_NETWORK' ? 'The upload could not reach the server. Make sure the backend is running on port 8080, and that the file is under 100 MB.' : err.message;
+  return errMsg(err);
+}
+
 function ImportCard({ onCreated }) {
   const toast = useToast();
   const [tab, setTab] = useState('github');
@@ -134,6 +141,7 @@ function ImportCard({ onCreated }) {
   const [file, setFile] = useState(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pct, setPct] = useState(0);
   const [error, setError] = useState('');
   const fileRef = useRef(null);
 
@@ -159,13 +167,14 @@ function ImportCard({ onCreated }) {
         const fd = new FormData();
         fd.append('name', (name || file.name.replace(/\.zip$/i, '')).trim());
         fd.append('file', file);
-        await api.post('/projects/upload', fd);
+        setPct(0);
+        await api.post('/projects/upload', fd, { timeout: 0, onUploadProgress: (e) => setPct(Math.round((e.loaded * 100) / (e.total || file.size || 1))) });
       }
       toast('Import started — analysis runs in the background');
       setUrl(''); setName(''); setFile(null);
       onCreated();
     } catch (err) {
-      setError(err.response ? errMsg(err) : err.message);
+      setError(uploadError(err));
     } finally {
       setBusy(false);
     }
@@ -196,12 +205,12 @@ function ImportCard({ onCreated }) {
               onDrop={(e) => { e.preventDefault(); setOver(false); pickFile(e.dataTransfer.files?.[0]); }}
             >
               <span className="ico"><UploadCloud size={22} /></span>
-              <div>{file ? <><b>{file.name}</b><span>{formatBytes(file.size)} · click to change</span></> : <><b>Drop a .zip here or click to browse</b><span>Up to 100 MB</span></>}</div>
+              <div>{file ? <><b>{file.name}</b><span>{formatBytes(file.size)} · click to change</span></> : <><b>Drop a .zip here or click to browse</b><span>Up to 100 MB · no need to include node_modules or target</span></>}</div>
               <input ref={fileRef} type="file" accept=".zip" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
             </div>
             <div className="field"><label>Project name <span style={{ color: 'var(--text-faint)', fontWeight: 400 }}>(optional)</span></label>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="From file name" /></div>
-            <button className="btn btn-primary" style={{ height: 40 }} disabled={busy || !file}>{busy ? <Spinner /> : <Zap size={16} />} Analyse</button>
+            <button className="btn btn-primary" style={{ height: 40 }} disabled={busy || !file}>{busy ? <Spinner /> : <Zap size={16} />} {busy && pct > 0 && pct < 100 ? `Uploading ${pct}%` : busy ? 'Starting…' : 'Analyse'}</button>
           </div>
         )}
       </div>

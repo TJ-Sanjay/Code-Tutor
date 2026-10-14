@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Boxes, Database, FolderTree, GitBranch, LayoutDashboard, MessageSquareCode, Network, Plug, RefreshCw, Route as RouteIcon, Search, Trash2,
 } from 'lucide-react';
@@ -31,6 +31,7 @@ const TABS = [
 export default function Workspace() {
   const { id } = useParams();
   const nav = useNavigate();
+  const loc = useLocation();
   const toast = useToast();
   const [project, setProject] = useState(null);
   const [missing, setMissing] = useState(false);
@@ -175,6 +176,7 @@ export default function Workspace() {
             )}
             {project?.ready && !overview && <div className="ws-center"><Spinner lg /></div>}
             {ready && (
+              <div className="view-wrap view-anim" key={loc.pathname}>
               <Routes>
                 <Route index element={<Navigate to="overview" replace />} />
                 <Route path="overview" element={<OverviewTab />} />
@@ -186,6 +188,7 @@ export default function Workspace() {
                 <Route path="dependencies" element={<DependenciesTab />} />
                 <Route path="*" element={<Navigate to="overview" replace />} />
               </Routes>
+              </div>
             )}
           </main>
           {ready && chatOpen && <aside className="ws-chat"><ChatPanel onClose={toggleChat} /></aside>}

@@ -187,18 +187,24 @@ public class ProjectPipelineService {
 
     // ───────────────────────── zip handling ─────────────────────────
 
+    /**
+     * Extracts with java.util.zip.ZipFile (reads the central directory), which — unlike streaming ZipInputStream —
+     * copes with archives written by Windows Explorer, macOS Finder, 7-Zip and Java tools (data descriptors, odd flags).
+     */
     private void extractZip(Path zip, Path target) throws IOException {
         long total = 0;
         long entries = 0;
-        try (InputStream is = Files.newInputStream(zip); ZipInputStream zis = new ZipInputStream(is)) {
-            ZipEntry entry;
-            byte[] buf = new byte[16 * 1024];
-            while ((entry = zis.getNextEntry()) != null) {
+        byte[] buf = new byte[16 * 1024];
+        try (java.util.zip.ZipFile zf = openZip(zip)) {
+            var en = zf.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry entry = en.nextElement();
                 if (++entries > maxZipEntries) {
-                    throw new LimitExceededException("The archive contains too many entries (limit " + maxZipEntries + ").");
+                    throw new LimitExceededException("The archive contains too many entries (limit " + maxZipEntries + "). Remove node_modules / build folders and try again.");
                 }
                 // some Windows tools write backslash separators and unmarked directory entries
                 String entryName = entry.getName().replace('\\', '/');
+                if (ignoredZipPath(entryName)) continue; // node_modules, .git, __MACOSX, … never extracted
                 Path out = target.resolve(entryName).normalize();
                 if (!out.startsWith(target)) {
                     throw new LimitExceededException("The archive contains an unsafe path and was rejected.");
@@ -207,27 +213,38 @@ public class ProjectPipelineService {
                     Files.createDirectories(out);
                     continue;
                 }
-                if (ignoredZipPath(entryName)) { zis.closeEntry(); continue; } // skip node_modules, .git, … early
                 Files.createDirectories(out.getParent());
-                try (OutputStream os = Files.newOutputStream(out)) {
+                try (InputStream in = zf.getInputStream(entry); OutputStream os = Files.newOutputStream(out)) {
                     int n;
-                    while ((n = zis.read(buf)) > 0) {
+                    while ((n = in.read(buf)) > 0) {
                         total += n;
                         if (total > maxRepoBytes) {
                             throw new LimitExceededException("The archive expands to more than " + (maxRepoBytes / 1024 / 1024)
-                                    + " MB. Please upload a smaller project.");
+                                    + " MB of source. Please upload a smaller project (leave out node_modules, target, build).");
                         }
                         os.write(buf, 0, n);
                     }
                 }
-                zis.closeEntry();
+            }
+        }
+    }
+
+    private static java.util.zip.ZipFile openZip(Path zip) throws IOException {
+        try {
+            return new java.util.zip.ZipFile(zip.toFile());
+        } catch (java.util.zip.ZipException e) {
+            // file names in a legacy encoding: retry leniently
+            try {
+                return new java.util.zip.ZipFile(zip.toFile(), java.nio.charset.StandardCharsets.ISO_8859_1);
+            } catch (java.util.zip.ZipException e2) {
+                throw new LimitExceededException("This file is not a readable ZIP archive. Re-create it (right-click the project folder → Compress) and try again.");
             }
         }
     }
 
     private static boolean ignoredZipPath(String name) {
         String n = "/" + name.replace('\\', '/');
-        for (String d : List.of("/node_modules/", "/.git/", "/target/", "/__pycache__/", "/.idea/", "/.gradle/", "/.venv/", "/dist/", "/build/")) {
+        for (String d : List.of("/node_modules/", "/__MACOSX/", "/.git/", "/target/", "/__pycache__/", "/.idea/", "/.gradle/", "/.venv/", "/dist/", "/build/")) {
             if (n.contains(d)) return true;
         }
         return false;

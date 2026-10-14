@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Boxes, Braces, Database, FileCode2, FolderTree, KeyRound, Layers, MessageSquareCode, Network, Plug, Route, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Boxes, Braces, Database, FileCode2, FolderTree, KeyRound, Layers, MessageSquareCode, Network, Plug, Route, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { get, post, errMsg } from '../api';
 import { useWorkspace } from '../pages/wsContext';
 import { LAYERS, langColor, layerColor, layerLabel } from '../lib/colors';
 import { formatNumber } from '../lib/format';
-import { Chip, useToast } from '../ui';
+import { Chip, CountUp, useToast } from '../ui';
 
 export default function OverviewTab() {
   const { projectId, overview: data, go, ask, reload } = useWorkspace();
@@ -40,7 +40,7 @@ export default function OverviewTab() {
     <div className="page">
       <section className="hero card">
         <div className="hero-text">
-          <span className="eyebrow"><Sparkles size={13} /> Project summary</span>
+          <span className="eyebrow">Project summary</span>
           <h1>{o.name}</h1>
           <p>{o.summary}</p>
           <div className="chip-row">
@@ -56,9 +56,9 @@ export default function OverviewTab() {
         </div>
       </section>
 
-      <div className="stat-grid">
+      <div className="stat-grid stagger">
         {stats.map(({ icon: Icon, label, value }) => (
-          <div key={label} className="stat card"><span className="stat-ico"><Icon size={17} /></span><b>{formatNumber(value)}</b><span>{label}</span></div>
+          <div key={label} className="stat card"><span className="stat-ico"><Icon size={17} /></span><b><CountUp value={value} /></b><span>{label}</span></div>
         ))}
       </div>
 
@@ -126,7 +126,7 @@ export default function OverviewTab() {
       )}
 
       <div className="section-head"><h2>Modules</h2><span className="hint">{data.modules.length} detected from the package structure</span></div>
-      <div className="module-grid">
+      <div className="module-grid stagger">
         {data.modules.map((m) => (
           <div key={m.name} className="card module-card" onClick={() => go('architecture')}>
             <div className="module-top"><b>{m.name}</b><span>{m.classes.length} classes</span></div>

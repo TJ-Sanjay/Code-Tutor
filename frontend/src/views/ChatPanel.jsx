@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ArrowUp, Bot, Code2, Eraser, Route, Sparkles, X } from 'lucide-react';
+import { ArrowUp, BookOpen, Bot, Code2, Eraser, Route, X } from 'lucide-react';
 import { del, errMsg, get, post } from '../api';
 import { useWorkspace } from '../pages/wsContext';
 import { useAuth } from '../auth';
@@ -79,7 +79,7 @@ export default function ChatPanel({ onClose }) {
   return (
     <div className="chat">
       <div className="chat-head">
-        <span className="chat-logo"><Sparkles size={15} /></span>
+        <span className="chat-logo"><BookOpen size={15} /></span>
         <div><b>Ask CodeTutor</b><span>{suggestions.provider === 'none' ? 'Answers from your code’s knowledge graph' : `Powered by ${suggestions.provider}`}</span></div>
         <div style={{ flex: 1 }} />
         {!empty && <button className="icon-btn" onClick={clear} title="Clear conversation"><Eraser size={15} /></button>}

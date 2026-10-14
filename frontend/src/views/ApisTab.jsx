@@ -55,8 +55,8 @@ export default function ApisTab() {
               <div className="api-row" onClick={() => setOpen(isOpen ? null : e.id)}>
                 <ChevronRight size={15} className="chev" />
                 <span className="badge-method" style={{ '--c': methodColor(e.httpMethod) }}>{e.httpMethod}</span>
-                <code className="api-path">{e.fullPath}</code>
-                <span className="api-handler">{short(e.controller)}.{e.handler.substring(e.handler.indexOf('#') + 1, e.handler.indexOf('('))}()</span>
+                <code className="api-path" title={e.fullPath}>{e.fullPath}</code>
+                <span className="api-handler" title={short(e.controller)}>{short(e.controller)}.{e.handler.substring(e.handler.indexOf('#') + 1, e.handler.indexOf('('))}()</span>
                 {secOn ? <Chip color={`var(--${a.tone})`}>{a.label}</Chip> : <span />}
                 <span className="api-actions" onClick={(ev) => ev.stopPropagation()}>
                   <button className="btn btn-sm" onClick={() => go('flow', { endpoint: e.id })}><Route size={13} /> Flow</button>

@@ -15,6 +15,7 @@ export default function FlowTab() {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(null);
+  const [collapse, setCollapse] = useState(true);
   const sec = overview.security;
   const current = params.get('endpoint');
 
@@ -94,12 +95,15 @@ export default function FlowTab() {
                 <h2>{flow.title}</h2>
                 <span className="mono dim">{flow.subtitle}</span>
               </div>
-              <div className="flow-legend">
+              {flow.steps.filter((x) => x.kind === 'FILTER').length > 1 && (
+                  <label className="check"><input type="checkbox" checked={!collapse} onChange={(e) => setCollapse(!e.target.checked)} /> show each security filter</label>
+                )}
+                <div className="flow-legend">
                 {['CLIENT', 'FILTER', 'CONTROLLER', 'SERVICE', 'REPOSITORY', 'TABLE'].map((k) => <span key={k}><i style={{ background: layerColor(k) }} />{layerLabel(k)}</span>)}
               </div>
             </div>
             <div className="flow-body">
-              <FlowDiagram flow={flow} selected={sel} onSelect={setSel} filename={`flow-${flow.title.replace(/[^a-z0-9]+/gi, '-')}`} />
+              <FlowDiagram flow={flow} selected={sel} onSelect={setSel} collapseFilters={collapse} filename={`flow-${flow.title.replace(/[^a-z0-9]+/gi, '-')}`} />
               <aside className="flow-steps">
                 {flow.notes?.length > 0 && <div className="flow-notes">{flow.notes.map((n, i) => <p key={i}>{n}</p>)}</div>}
                 <div className="card-title" style={{ margin: '4px 0 8px' }}>Step by step</div>

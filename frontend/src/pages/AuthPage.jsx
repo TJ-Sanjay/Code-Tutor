@@ -55,9 +55,16 @@ export default function AuthPage() {
             ))}
           </ul>
         </div>
-        <div className="auth-art" aria-hidden>
-          <span className="n n1">Controller</span><span className="n n2">Service</span><span className="n n3">Repository</span><span className="n n4">Entity</span>
-          <svg viewBox="0 0 300 120" preserveAspectRatio="none"><path d="M60 22 C100 22 90 60 130 60 S170 60 200 98" /><path d="M150 22 C190 22 190 60 230 60" /><path d="M60 98 C110 98 110 60 150 60" /></svg>
+        <div className="auth-path" aria-hidden>
+          <span className="auth-path-label">A request, traced</span>
+          <div className="auth-path-row">
+            {[['Browser', '#0891b2'], ['Controller', '#2563eb'], ['Service', '#0d9488'], ['Repository', '#d97706'], ['Table', '#ea580c']].map(([n, c], i) => (
+              <React.Fragment key={n}>
+                {i > 0 && <i className="auth-arrow" style={{ animationDelay: i * 0.25 + 's' }} />}
+                <span className="auth-pill" style={{ '--c': c, animationDelay: i * 0.25 + 's' }}>{n}</span>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </aside>
 

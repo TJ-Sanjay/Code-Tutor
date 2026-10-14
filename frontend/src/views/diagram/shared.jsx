@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import '@xyflow/react/dist/style.css';
-import { Handle, Position, getNodesBounds, getViewportForBounds, useReactFlow } from '@xyflow/react';
+import { Handle, Position, getNodesBounds, useReactFlow } from '@xyflow/react';
 import { toPng } from 'html-to-image';
-import { Download, Maximize2 } from 'lucide-react';
-import { layerColor, layerLabel } from '../../lib/colors';
+import { Archive, Box, Cog, Download, Globe, KeyRound, Maximize2, Monitor, Puzzle, Reply, ShieldCheck, Table2, Layers } from 'lucide-react';
+import { LAYER_HELP, LAYER_PLURAL, layerColor, layerLabel } from '../../lib/colors';
 
 /** Current theme name ('dark' | 'light'), updated live when the user toggles it. */
 export function useThemeName() {
@@ -16,38 +16,79 @@ export function useThemeName() {
   return t;
 }
 
+/**
+ * Size of everything that is actually drawn (nodes, edges and edge labels), in diagram coordinates.
+ * Measured from the DOM because node data alone misses edge labels and not-yet-measured nodes — that is what cropped exports.
+ */
+function renderedBounds(root, rf, nodes) {
+  const vp = rf.getViewport();
+  const host = root.querySelector('.react-flow');
+  const hr = host.getBoundingClientRect();
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  root.querySelectorAll('.react-flow__node, .react-flow__edge-path, .react-flow__edge-textbg, .react-flow__edgelabel-renderer > div').forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    x1 = Math.min(x1, (r.left - hr.left - vp.x) / vp.zoom);
+    y1 = Math.min(y1, (r.top - hr.top - vp.y) / vp.zoom);
+    x2 = Math.max(x2, (r.right - hr.left - vp.x) / vp.zoom);
+    y2 = Math.max(y2, (r.bottom - hr.top - vp.y) / vp.zoom);
+  });
+  if (!isFinite(x1)) return getNodesBounds(nodes);
+  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
 /** Fit / export buttons — must be rendered inside <ReactFlow>. */
 export function DiagramTools({ containerRef, filename = 'diagram' }) {
   const rf = useReactFlow();
+  const [busy, setBusy] = useState(false);
+
   const exportPng = useCallback(async () => {
+    const root = containerRef.current;
     const nodes = rf.getNodes().filter((n) => !n.hidden);
-    if (!nodes.length || !containerRef.current) return;
-    const bounds = getNodesBounds(nodes);
-    const pad = 60;
-    const width = Math.ceil(bounds.width + pad * 2);
-    const height = Math.ceil(bounds.height + pad * 2);
-    const vp = getViewportForBounds(bounds, width, height, 0.1, 2, 0.08);
-    const el = containerRef.current.querySelector('.react-flow__viewport');
-    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0b0d12';
+    if (!nodes.length || !root) return;
+    setBusy(true);
+    const viewport = root.querySelector('.react-flow__viewport');
+    const markers = root.querySelector('svg.react-flow__marker, .react-flow__marker');
+    let markerClone = null;
     try {
-      const url = await toPng(el, {
-        backgroundColor: bg, width, height, pixelRatio: 2,
-        style: { width: `${width}px`, height: `${height}px`, transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})` },
-        filter: (n) => !(n.classList && (n.classList.contains('react-flow__minimap') || n.classList.contains('react-flow__controls'))),
+      // 1. exact size of the whole diagram (every node, including the lane backgrounds) plus a margin for edges / labels
+      const b = renderedBounds(root, rf, nodes);
+      const pad = 90;
+      const width = Math.ceil(b.width + pad * 2);
+      const height = Math.ceil(b.height + pad * 2);
+      // keep the bitmap within what browsers can draw, but stay sharp for normal sized diagrams
+      const ratio = Math.max(0.5, Math.min(1.5, 5000 / Math.max(width, height)));
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#ffffff';
+
+      // 2. arrow heads are defined outside the exported layer — copy them in for the capture
+      if (markers) {
+        markerClone = markers.cloneNode(true);
+        markerClone.style.cssText = 'position:absolute;width:0;height:0;overflow:visible';
+        viewport.appendChild(markerClone);
+      }
+
+      // 3. render at scale 1 with the diagram's top-left corner at the margin → nothing can be cut off
+      const url = await toPng(viewport, {
+        backgroundColor: bg, width, height, pixelRatio: ratio, cacheBust: false, skipFonts: true, fontEmbedCSS: '',
+        style: { width: width + 'px', height: height + 'px', transform: 'translate(' + (pad - b.x) + 'px, ' + (pad - b.y) + 'px) scale(1)', transformOrigin: '0 0', fontFamily: "'Segoe UI', system-ui, -apple-system, Arial, sans-serif" },
       });
       const a = document.createElement('a');
-      a.download = `${filename}.png`;
+      a.download = filename + '.png';
       a.href = url;
       a.click();
     } catch (e) {
       console.error('PNG export failed', e);
+      alert('Could not create the PNG: ' + (e?.message || e));
+    } finally {
+      markerClone?.remove();
+      setBusy(false);
     }
   }, [rf, containerRef, filename]);
 
   return (
     <div className="diagram-tools">
       <button className="btn btn-sm" onClick={() => rf.fitView({ duration: 350, padding: 0.12 })}><Maximize2 size={14} /> Fit</button>
-      <button className="btn btn-sm" onClick={exportPng}><Download size={14} /> PNG</button>
+      <button className="btn btn-sm" onClick={exportPng} disabled={busy}><Download size={14} /> {busy ? 'Saving…' : 'PNG'}</button>
     </div>
   );
 }
@@ -114,15 +155,48 @@ export function ModuleNode({ data }) {
 }
 
 /* ───────── flow step ───────── */
+const KIND_ICON = {
+  CLIENT: Monitor, FILTER: ShieldCheck, SECURITY: KeyRound, CONTROLLER: Globe, SERVICE: Cog, REPOSITORY: Archive,
+  TABLE: Table2, RESPONSE: Reply, COMPONENT: Puzzle,
+};
+export const kindIcon = (k) => KIND_ICON[k] || Box;
+
 export function StepNode({ data }) {
   const color = layerColor(data.kind);
+  const Icon = kindIcon(data.kind);
   return (
-    <div className={`snode ${data.dim ? 'dim' : ''} ${data.selected ? 'sel' : ''}`} style={{ '--c': color }}>
+    <div className={`snode ${data.dim ? 'dim' : ''} ${data.selected ? 'sel' : ''} ${data.compact ? 'compact' : ''}`} style={{ '--c': color, animationDelay: (data.delay || 0) + 'ms' }}>
       <Handles />
-      <div className="snode-top"><span className="snode-num">{data.num}</span><span className="snode-kind">{layerLabel(data.kind)}</span></div>
-      <div className="snode-title" title={data.title}>{data.title}</div>
-      {data.subtitle && <div className="snode-sub" title={data.subtitle}>{data.subtitle}</div>}
-      {data.access && <div className={`snode-access ${data.access === 'PUBLIC' ? 'good' : 'warn'}`}>{data.access === 'PUBLIC' ? 'public' : data.access === 'AUTHENTICATED' ? 'login required' : data.access.toLowerCase()}</div>}
+      <div className="snode-band">
+        <Icon size={13} /><span>{data.kindLabel || layerLabel(data.kind)}</span><i>{data.num}</i>
+      </div>
+      <div className="snode-body">
+        <div className="snode-title" title={data.title}>{data.title}</div>
+        {data.subtitle && <div className="snode-sub" title={data.subtitle}>{data.subtitle}</div>}
+        {data.access && <span className={`snode-access ${data.access === 'PUBLIC' ? 'good' : 'warn'}`}>{data.access === 'PUBLIC' ? 'public' : data.access === 'AUTHENTICATED' ? 'login required' : data.access.replace('ROLE:', 'role ').toLowerCase()}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ───────── high-level architecture band: coloured header + name pills ───────── */
+export function BandNode({ data }) {
+  const Icon = kindIcon(data.layer);
+  const card = data.variant === 'card';
+  return (
+    <div className={`band ${card ? 'band-card' : ''}`} style={{ '--c': layerColor(data.layer), width: data.width, minHeight: data.height, animationDelay: (data.delay || 0) + 'ms' }}>
+      <Handles />
+      <div className="band-head">
+        <span className="band-ico"><Icon size={card ? 16 : 20} /></span>
+        <div className="band-title"><b>{LAYER_PLURAL[data.layer] || layerLabel(data.layer)}</b><span>{LAYER_HELP[data.layer] || ''}</span></div>
+        <em>{data.count}</em>
+      </div>
+      <div className="band-body">
+        {data.items.map((it) => (
+          <button key={it.id} className={`bchip ${data.selected === it.id ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); data.onPick?.(it.id); }} title={it.name}>{it.name}</button>
+        ))}
+        {data.more > 0 && <span className="bmore">+ {data.more} more</span>}
+      </div>
     </div>
   );
 }
@@ -150,4 +224,6 @@ export function TableNode({ data }) {
 
 function shortType(t) { return (t || '').replace('VARCHAR', 'varchar').replace('INTEGER', 'int').replace('BIGINT', 'bigint').replace('TIMESTAMP', 'timestamp').replace('BOOLEAN', 'bool').toLowerCase(); }
 
-export const nodeTypes = { cls: ClassNode, lane: LaneNode, mod: ModuleNode, step: StepNode, table: TableNode };
+export function CaptionNode({ data }) { return <div className="support-title">{data.text}</div>; }
+
+export const nodeTypes = { caption: CaptionNode, cls: ClassNode, lane: LaneNode, mod: ModuleNode, step: StepNode, table: TableNode, band: BandNode };

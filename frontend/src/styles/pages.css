@@ -2,10 +2,7 @@
 .auth-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(380px, 1.05fr) minmax(420px, 1fr); }
 .auth-brand {
   position: relative; overflow: hidden; padding: 34px 48px; display: flex; flex-direction: column; justify-content: space-between;
-  background:
-    radial-gradient(900px 500px at 0% 0%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 60%),
-    radial-gradient(700px 500px at 100% 100%, rgba(167, 139, 250, .16), transparent 60%),
-    var(--bg-elev);
+  background: var(--accent-soft);
   border-right: 1px solid var(--border);
 }
 .auth-hero h1 { font-size: 38px; line-height: 1.12; letter-spacing: -0.025em; max-width: 520px; font-weight: 700; }
@@ -15,12 +12,6 @@
 .auth-features strong { display: block; font-size: 14px; }
 .auth-features span:not(.auth-feature-ico) { color: var(--text-dim); font-size: 13px; }
 .auth-feature-ico { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); flex-shrink: 0; }
-.auth-art { position: relative; height: 130px; margin-top: 24px; opacity: .95; }
-.auth-art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.auth-art path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 5; opacity: .5; vector-effect: non-scaling-stroke; }
-.auth-art .n { position: absolute; padding: 6px 12px; border-radius: 9px; font-size: 12px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm); }
-.auth-art .n1 { left: 6%; top: 4px; color: #7c8cff; } .auth-art .n2 { left: 46%; top: 4px; color: #2dd4bf; }
-.auth-art .n3 { left: 46%; top: 54px; color: #fbbf24; margin-left: 40px; } .auth-art .n4 { left: 70%; top: 94px; color: #f472b6; }
 
 .auth-main { position: relative; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
 .auth-top { position: absolute; top: 18px; right: 20px; }
@@ -46,7 +37,7 @@
 .topbar-right { display: flex; align-items: center; gap: 6px; }
 .user-btn { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); }
 .user-btn:hover { background: var(--bg-hover); }
-.avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); color: #fff; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; justify-content: center; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 11.5px; display: flex; align-items: center; justify-content: center; }
 .user-name { font-size: 13px; font-weight: 600; }
 .user-menu { position: absolute; right: 24px; top: 54px; width: 280px; padding: 14px; border-radius: 14px; background: var(--bg-elev); border: 1px solid var(--border-strong); box-shadow: var(--shadow); z-index: 40; animation: pop .15s; }
 .user-menu .who { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -95,3 +86,11 @@
 .card-menu-btn { position: absolute; right: 10px; top: 10px; }
 .status-chip { font-size: 11px; }
 @media (max-width: 720px) { .import-row { grid-template-columns: 1fr; } .proj-grid { grid-template-columns: 1fr; } }
+
+.auth-path { margin-top: 28px; }
+.auth-path-label { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+.auth-path-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.auth-pill { padding: 7px 13px; border-radius: 9px; font-size: 13px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border-strong); border-top: 3px solid var(--c); animation: pop-in .5s cubic-bezier(.2,.7,.2,1) both; }
+.auth-arrow { display: inline-block; width: 22px; height: 2px; background: repeating-linear-gradient(90deg, var(--text-faint) 0 5px, transparent 5px 9px); background-size: 18px 2px; animation: arrow-run 1s linear infinite, fade-in .5s both; }
+@keyframes arrow-run { to { background-position: 18px 0; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

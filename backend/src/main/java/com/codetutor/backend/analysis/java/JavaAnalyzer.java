@@ -622,6 +622,7 @@ public class JavaAnalyzer {
                 c.module = seg;
             }
         }
+        if (byLayer) foldMinorModules();
         for (CB c : classes.values()) {
             if (c.module == null) {
                 CB root = c;
@@ -630,6 +631,30 @@ public class JavaAnalyzer {
             }
         }
         return base;
+    }
+
+    /**
+     * In projects organised by layer (controller/, service/, dto/ …) every class name would become its own module.
+     * A "real" module has a controller, service, repository or entity; helper-only names (a DTO, an enum, an exception)
+     * are folded into the closest real module (ClubMemberDTO → clubMember, ClubStatus → club) or into "common".
+     */
+    private void foldMinorModules() {
+        Set<String> core = new HashSet<>();
+        Set<String> fixed = Set.of("config", "security", "advice", "util", "core", "tests");
+        for (CB c : classes.values()) {
+            if (c.module != null && c.outer == null && !c.test
+                    && Set.of("CONTROLLER", "SERVICE", "REPOSITORY", "ENTITY").contains(c.layer)) core.add(c.module);
+        }
+        for (CB c : classes.values()) {
+            if (c.module == null || c.test || core.contains(c.module) || fixed.contains(c.module)) continue;
+            String lower = c.module.toLowerCase(Locale.ROOT);
+            String best = null;
+            for (String k : core) {
+                String kl = k.toLowerCase(Locale.ROOT);
+                if (kl.length() >= 3 && lower.startsWith(kl) && (best == null || k.length() > best.length())) best = k;
+            }
+            c.module = best != null ? best : "common";
+        }
     }
 
     private String stem(CB c) {

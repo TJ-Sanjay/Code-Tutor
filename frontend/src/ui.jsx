@@ -73,6 +73,25 @@ export function Modal({ title, children, onClose, actions, width }) {
 }
 
 /* ───────── small pieces ───────── */
+/** Number that counts up from 0 when it appears (skipped for reduced-motion users). */
+export function CountUp({ value, duration = 800 }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (value == null) return undefined;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || value < 2) { setN(value); return undefined; }
+    let raf;
+    const t0 = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / duration);
+      setN(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return <>{new Intl.NumberFormat('en').format(n)}</>;
+}
+
 export const Spinner = ({ lg }) => <span className={`spinner ${lg ? 'lg' : ''}`} />;
 
 export function Chip({ color, children, onClick, title, style }) {
