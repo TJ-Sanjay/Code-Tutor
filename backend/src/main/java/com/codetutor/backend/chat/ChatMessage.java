@@ -1,5 +1,7 @@
 package com.codetutor.backend.chat;
 
+import com.codetutor.backend.auth.model.User;
+import com.codetutor.backend.project.model.Project;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -16,11 +18,15 @@ public class ChatMessage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "project_id", nullable = false)
-    private Long projectId;
+    /** Many messages belong to one project (foreign key chat_messages.project_id -> projects.id). */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "project_id", nullable = false)
+    private Project project;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    /** Many messages were written by one user (foreign key chat_messages.user_id -> users.id). */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     /** USER or ASSISTANT */
     @Column(nullable = false, length = 12)
@@ -43,9 +49,9 @@ public class ChatMessage {
 
     public ChatMessage() {}
 
-    public ChatMessage(Long projectId, Long userId, String role, String content, String sourcesJson, String flowJson) {
-        this.projectId = projectId;
-        this.userId = userId;
+    public ChatMessage(Project project, User user, String role, String content, String sourcesJson, String flowJson) {
+        this.project = project;
+        this.user = user;
         this.role = role;
         this.content = content;
         this.sourcesJson = sourcesJson;
@@ -53,8 +59,8 @@ public class ChatMessage {
     }
 
     public Long getId() { return id; }
-    public Long getProjectId() { return projectId; }
-    public Long getUserId() { return userId; }
+    public Project getProject() { return project; }
+    public User getUser() { return user; }
     public String getRole() { return role; }
     public String getContent() { return content; }
     public String getSourcesJson() { return sourcesJson; }

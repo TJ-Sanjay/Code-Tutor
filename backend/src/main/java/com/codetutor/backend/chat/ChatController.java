@@ -48,7 +48,7 @@ public class ChatController {
         for (ChatMessage m : messages.findByProjectIdAndUserIdOrderByIdAsc(id, userId)) {
             history.add(new LlmClient.Turn(m.getRole().equals("USER") ? "user" : "assistant", m.getContent()));
         }
-        messages.save(new ChatMessage(id, userId, "USER", req.query().trim(), null, null));
+        messages.save(new ChatMessage(ctx.project(), ctx.user(), "USER", req.query().trim(), null, null));
 
         ChatEngine.Answer a = new ChatEngine(ctx.k(), llm).answer(req.query(), req.selection(), history);
         String sources = mapper.writeValueAsString(a.sources());
@@ -57,7 +57,7 @@ public class ChatController {
         // actions are stored inside the sources json envelope to avoid another column
         String envelope = mapper.writeValueAsString(java.util.Map.of("sources", mapper.readTree(sources),
                 "actions", actions == null ? mapper.createArrayNode() : mapper.readTree(actions)));
-        ChatMessage saved = messages.save(new ChatMessage(id, userId, "ASSISTANT", a.answer(), envelope, flow));
+        ChatMessage saved = messages.save(new ChatMessage(ctx.project(), ctx.user(), "ASSISTANT", a.answer(), envelope, flow));
         return ApiResponse.success("Answer", view(saved));
     }
 
