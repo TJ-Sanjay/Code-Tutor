@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: code-tutor-backend
+
+  # Persistent file-based H2 database: accounts, projects and chat history survive restarts.
+  # To use PostgreSQL instead, start with:  --spring.profiles.active=postgres
+  datasource:
+    url: jdbc:h2:file:${app.data-dir:./data}/db/codetutor;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ${DB_PASSWORD:codetutor}
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET:code-tutor-very-secret-key-minimum-256-bits-long-for-hs256-algorithm}
+  access-token-expiration: 86400000     # 24 hours
+  refresh-token-expiration: 604800000   # 7 days
+
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:5173,http://localhost:5174
+
+# Where analysed repositories and analysis results live on disk
+app:
+  data-dir: ./data
+
+workspace:
+  root-dir: ./data/workspaces
+
+# Resource limits (protects the server from huge / malicious uploads)
+limits:
+  max-files: 8000
+  max-repo-bytes: 209715200      # 200 MB of extracted source
+  max-zip-entries: 20000
+  max-file-bytes: 2097152        # files larger than 2 MB are not parsed
+  max-projects-per-user: 10
+
+# Optional LLM for richer chat answers. Without a key the app answers from the
+# knowledge graph + vector index only (still grounded in the real code).
+#   provider: anthropic | openai | gemini | none
+llm:
+  provider: ${LLM_PROVIDER:none}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:}
+  base-url: ${LLM_BASE_URL:}
+
+logging:
+  level:
+    com.codetutor: INFO
+    org.springframework.security: WARN
