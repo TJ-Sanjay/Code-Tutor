@@ -71,7 +71,8 @@ public class ZipValidator {
 
         // Magic bytes check (first 2 bytes must be PK)
         try {
-            byte[] firstBytes = file.getBytes();
+            byte[] firstBytes;
+            try (java.io.InputStream in = file.getInputStream()) { firstBytes = in.readNBytes(2); }
             if (firstBytes.length < 2
                     || firstBytes[0] != ZIP_MAGIC[0]
                     || firstBytes[1] != ZIP_MAGIC[1]) {

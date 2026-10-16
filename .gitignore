@@ -1,0 +1,15 @@
+# build output & dependencies
+backend/target/
+frontend/node_modules/
+frontend/dist/
+
+# runtime data: database, cloned / uploaded repositories, analysis files
+backend/data/
+backend/workspaces/
+scratch_cp.txt
+
+# IDE / OS
+.idea/
+.vscode/
+*.log
+.DS_Store

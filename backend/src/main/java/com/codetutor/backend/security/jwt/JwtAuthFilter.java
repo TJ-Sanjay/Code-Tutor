@@ -60,7 +60,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            UserDetails userDetails;
+            try {
+                userDetails = userDetailsService.loadUserByUsername(username);
+            } catch (Exception e) {
+                // token of a user that no longer exists (e.g. database was reset): treat as anonymous → 401
+                log.debug("JWT subject {} not found: {}", username, e.getMessage());
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             if (jwtUtil.isTokenValid(jwt, userDetails)) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(

@@ -1,4 +1,0 @@
-# The default profile now uses a persistent file-based H2 database, so no special "dev" settings are needed.
-logging:
-  level:
-    com.codetutor: DEBUG
