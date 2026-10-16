@@ -14,9 +14,10 @@ draws how it works and answers questions about it, with the exact lines highligh
 | Java (JDK) | 21 or newer | `java -version` |
 | Maven | 3.9+ | `mvn -v` |
 | Node.js | 18 or newer (with npm) | `node -v` |
+| MySQL | 8.0 (service running on port 3306) | `mysql --version` |
 | Internet | needed to clone GitHub repos and load fonts | – |
 
-No database, Docker, Redis or API key is required.
+No Docker, Redis or API key is required. The database is **MySQL**: run **`setup-mysql.cmd`** once (double-click; it asks for your MySQL root password and creates the `codetutor` database and user).
 
 ### Start everything (Windows)
 
@@ -78,7 +79,7 @@ Settings live in `backend/src/main/resources/application.yml`; the ones below ca
 | `LLM_PROVIDER` | `anthropic`, `openai`, `gemini` or `none` | `none` |
 | `LLM_API_KEY` | API key for the provider above | – |
 | `LLM_MODEL` | Model name (optional) | provider default |
-| `DB_PASSWORD` | Password of the local H2 file database | `codetutor` |
+| `DB_PASSWORD` | Password of the MySQL application user | `codetutor` |
 
 Limits (max files, repo size, projects per user…) are under `limits:` in `application.yml`.
 
@@ -90,15 +91,8 @@ The chat header shows *"Powered by …"* when a key is active.
 
 ### Data and database
 
-Accounts, projects and chats are stored in `backend/data/` (a file-based H2 database, cloned repositories and analysis files), so they survive restarts.
-To use PostgreSQL instead:
-
-```bash
-set DB_URL=jdbc:postgresql://localhost:5432/codetutor
-set DB_USER=postgres
-set DB_PASSWORD=postgres
-mvn spring-boot:run -Dspring-boot.run.profiles=postgres
-```
+Accounts, projects and chats are stored in **MySQL** (database `codetutor`, user `codetutor` / password `codetutor` — change them with the `DB_USER`, `DB_PASSWORD` or `DB_URL` environment variables). Cloned repositories and analysis files live in `backend/data/`.
+If an old H2 file (`backend/data/db/codetutor.mv.db`) exists, its data is copied into MySQL automatically on the first start.
 
 ---
 

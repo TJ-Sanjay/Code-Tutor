@@ -57,7 +57,14 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 Database for local development and testing -->
+        <!-- MySQL Driver (the application database) -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- H2: used by the automated tests and to copy old data into MySQL once (LegacyH2Migration) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

@@ -63,6 +63,7 @@ public class SecurityConfig {
                     response.setContentType("application/json");
                     response.getWriter().write("{\"success\":false,\"message\":\"Authentication required\",\"error\":\"UNAUTHORIZED\"}");
                 }))
+                .headers(h -> h.frameOptions(f -> f.sameOrigin()))   // the H2 console page uses frames
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )

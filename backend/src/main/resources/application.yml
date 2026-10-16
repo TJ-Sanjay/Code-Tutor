@@ -2,13 +2,14 @@ spring:
   application:
     name: code-tutor-backend
 
-  # Persistent file-based H2 database: accounts, projects and chat history survive restarts.
-  # To use PostgreSQL instead, start with:  --spring.profiles.active=postgres
+  # MySQL database (accounts, projects, chat history). The "codetutor" database is created automatically.
+  # Run setup-mysql.cmd once to create the database and the "codetutor" user. Override with DB_USER / DB_PASSWORD / DB_URL.
+  # Other options:  DB_URL=jdbc:mysql://host:3306/name   or   --spring.profiles.active=postgres
   datasource:
-    url: jdbc:h2:file:${app.data-dir:./data}/db/codetutor;DB_CLOSE_ON_EXIT=FALSE
-    username: sa
+    url: ${DB_URL:jdbc:mysql://localhost:3306/codetutor?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${DB_USER:codetutor}
     password: ${DB_PASSWORD:codetutor}
-    driver-class-name: org.h2.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
