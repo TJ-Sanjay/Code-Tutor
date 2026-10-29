@@ -16,7 +16,19 @@ public class TechStackAnalyzer {
 
     public record Result(List<Library> libraries, List<String> frameworks, List<String> buildTools,
                          List<String> databases, List<String> tools, Map<String, Double> languages,
-                         String contextPath) {}
+                         String contextPath) {
+        /** Adds frameworks / databases / tools discovered later (e.g. from Django settings) without duplicates. */
+        public Result withExtras(List<String> fw, List<String> db, List<String> tl) {
+            if (fw.isEmpty() && db.isEmpty() && tl.isEmpty()) return this;
+            return new Result(libraries, union(frameworks, fw), buildTools, union(databases, db), union(tools, tl), languages, contextPath);
+        }
+
+        private static List<String> union(List<String> a, List<String> b) {
+            LinkedHashSet<String> s = new LinkedHashSet<>(a);
+            s.addAll(b);
+            return new ArrayList<>(s);
+        }
+    }
 
     private static final Map<String, String> LANG_BY_EXT = new LinkedHashMap<>();
     static {
@@ -65,12 +77,17 @@ public class TechStackAnalyzer {
         for (FileInfo f : files) {
             String p = f.path();
             String name = p.substring(p.lastIndexOf('/') + 1).toLowerCase(Locale.ROOT);
+            if (name.startsWith("requirements") && name.endsWith(".txt")) name = "requirements.txt";
             try {
                 switch (name) {
                     case "pom.xml" -> { build.add("Maven"); readPom(root.resolve(p), libs); }
                     case "build.gradle", "build.gradle.kts" -> { build.add("Gradle"); readGradle(root.resolve(p), libs); }
                     case "package.json" -> { build.add("npm"); readPackageJson(root.resolve(p), libs); }
                     case "requirements.txt" -> { build.add("pip"); readRequirements(root.resolve(p), libs); }
+                    case "pyproject.toml" -> { build.add("pip / pyproject"); readPyproject(root.resolve(p), libs); }
+                    case "pipfile" -> { build.add("Pipenv"); readPipfile(root.resolve(p), libs); }
+                    case "manage.py" -> tools.add("Django manage.py");
+                    case "poetry.lock" -> build.add("Poetry");
                     case "dockerfile" -> tools.add("Docker");
                     case "docker-compose.yml", "docker-compose.yaml", "compose.yaml" -> { tools.add("Docker"); tools.add("Docker Compose"); }
                     case "vite.config.js", "vite.config.ts" -> build.add("Vite");
@@ -100,8 +117,20 @@ public class TechStackAnalyzer {
             if (n.equals("@angular/core")) frameworks.add("Angular");
             if (n.equals("express")) frameworks.add("Express");
             if (n.equals("django")) frameworks.add("Django");
+            if (n.equals("djangorestframework")) frameworks.add("Django REST Framework");
             if (n.equals("flask")) frameworks.add("Flask");
             if (n.equals("fastapi")) frameworks.add("FastAPI");
+            if (n.startsWith("psycopg") || n.equals("asyncpg")) dbs.add("PostgreSQL");
+            if (n.equals("mysqlclient") || n.equals("pymysql") || n.equals("mysql-connector-python")) dbs.add("MySQL");
+            if (n.equals("pymongo") || n.equals("mongoengine") || n.equals("djongo")) dbs.add("MongoDB");
+            if (n.equals("celery")) tools.add("Celery");
+            if (n.equals("gunicorn") || n.equals("uvicorn")) tools.add(n.equals("gunicorn") ? "Gunicorn" : "Uvicorn");
+            if (n.equals("djangorestframework-simplejwt") || n.equals("pyjwt") || n.equals("python-jose")) tools.add("JWT");
+            if (n.equals("django-cors-headers")) tools.add("django-cors-headers");
+            if (n.equals("drf-spectacular") || n.equals("drf-yasg")) tools.add("OpenAPI / Swagger");
+            if (n.equals("pytest") || n.equals("pytest-django")) tools.add("Testing");
+            if (n.equals("sqlalchemy")) tools.add("SQLAlchemy");
+            if (n.equals("pydantic")) tools.add("Pydantic");
             if (n.contains("postgresql")) dbs.add("PostgreSQL");
             if (n.contains("com.h2database") || n.equals("h2")) dbs.add("H2");
             if (n.contains("mysql")) dbs.add("MySQL");
@@ -210,10 +239,42 @@ public class TechStackAnalyzer {
     private void readRequirements(Path p, List<Library> libs) throws IOException {
         for (String line : Files.readAllLines(p)) {
             String l = line.trim();
-            if (l.isEmpty() || l.startsWith("#")) continue;
+            if (l.isEmpty() || l.startsWith("#") || l.startsWith("-") || l.startsWith("git+") || l.contains("://")) continue;
+            l = l.replaceAll("\\s*;.*$", "").replaceAll("\\[.*?]", "");
             String[] parts = l.split("[=<>~!]=?", 2);
-            libs.add(new Library(parts[0].trim().toLowerCase(Locale.ROOT), parts.length > 1 ? parts[1].trim() : "any",
+            libs.add(new Library(parts[0].trim().toLowerCase(Locale.ROOT).replace('_', '-'), parts.length > 1 ? parts[1].trim() : "any",
                     "runtime", "pip"));
+        }
+    }
+
+    private void readPyproject(Path p, List<Library> libs) throws IOException {
+        String t = Files.readString(p);
+        // PEP 621:  dependencies = ["django>=4", ...]   and Poetry:  django = "^4.2"
+        Matcher dep = Pattern.compile("dependencies\\s*=\\s*\\[(.*?)]", Pattern.DOTALL).matcher(t);
+        while (dep.find()) {
+            Matcher s = Pattern.compile("['\"]([A-Za-z0-9_.\\-]+)\\s*(?:\\[.*?])?\\s*([^'\"]*)['\"]").matcher(dep.group(1));
+            while (s.find()) libs.add(new Library(s.group(1).toLowerCase(Locale.ROOT).replace('_', '-'),
+                    s.group(2).isBlank() ? "any" : s.group(2).trim(), "runtime", "pip"));
+        }
+        Matcher poetry = Pattern.compile("\\[tool\\.poetry\\.dependencies](.*?)(?:\\n\\[|$)", Pattern.DOTALL).matcher(t);
+        if (poetry.find()) {
+            Matcher s = Pattern.compile("(?m)^([A-Za-z0-9_.\\-]+)\\s*=\\s*(?:\"([^\"]*)\"|\\{[^}]*version\\s*=\\s*\"([^\"]*)\")").matcher(poetry.group(1));
+            while (s.find()) {
+                if (s.group(1).equalsIgnoreCase("python")) continue;
+                libs.add(new Library(s.group(1).toLowerCase(Locale.ROOT).replace('_', '-'),
+                        s.group(2) != null ? s.group(2) : s.group(3) == null ? "any" : s.group(3), "runtime", "pip"));
+            }
+        }
+    }
+
+    private void readPipfile(Path p, List<Library> libs) throws IOException {
+        boolean in = false;
+        for (String line : Files.readAllLines(p)) {
+            String l = line.trim();
+            if (l.startsWith("[")) { in = l.equals("[packages]"); continue; }
+            if (!in || l.isEmpty() || l.startsWith("#")) continue;
+            Matcher m = Pattern.compile("^([A-Za-z0-9_.\\-]+)\\s*=\\s*\"?([^\"]*)\"?").matcher(l);
+            if (m.find()) libs.add(new Library(m.group(1).toLowerCase(Locale.ROOT).replace('_', '-'), m.group(2).equals("*") ? "any" : m.group(2), "runtime", "pip"));
         }
     }
 

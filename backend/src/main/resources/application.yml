@@ -33,6 +33,10 @@ jwt:
   access-token-expiration: 86400000     # 24 hours
   refresh-token-expiration: 604800000   # 7 days
 
+# "Continue with Google" is shown only when a Google OAuth client id is set (see README / google.cmd.example)
+google:
+  client-id: ${GOOGLE_CLIENT_ID:}
+
 cors:
   allowed-origins: http://localhost:3000,http://localhost:5173,http://localhost:5174
 

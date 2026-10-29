@@ -28,14 +28,17 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
+    private final GoogleTokenVerifier googleVerifier;
 
     public AuthService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtUtil jwtUtil,
             AuthenticationManager authenticationManager,
-            UserDetailsService userDetailsService
+            UserDetailsService userDetailsService,
+            GoogleTokenVerifier googleVerifier
     ) {
+        this.googleVerifier = googleVerifier;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
@@ -96,6 +99,40 @@ public class AuthService {
         log.info("User logged in: {} ({})", user.getUsername(), user.getEmail());
         return buildAuthResponse(user, accessToken, refreshToken);
     }
+
+    /**
+     * "Continue with Google": signs in the account that owns the verified Google e-mail, creating it on first use.
+     */
+    @Transactional
+    public AuthResponse loginWithGoogle(String credential) {
+        GoogleTokenVerifier.Profile p = googleVerifier.verify(credential)
+                .orElseThrow(() -> new BadCredentialsException("Google sign-in could not be verified. Please try again."));
+        User user = userRepository.findByEmail(p.email()).orElse(null);
+        if (user == null) {
+            String base = p.email().substring(0, p.email().indexOf('@')).replaceAll("[^A-Za-z0-9._-]", "");
+            if (base.length() < 3) base = base + "user";
+            if (base.length() > 40) base = base.substring(0, 40);
+            String username = base;
+            for (int i = 2; userRepository.existsByUsername(username); i++) username = base + i;
+            user = userRepository.save(User.builder()
+                    .username(username)
+                    .email(p.email())
+                    .password(passwordEncoder.encode(java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID())) // never used: Google signs them in
+                    .fullName(p.name().isBlank() ? username : p.name())
+                    .avatarUrl(p.picture().isBlank() ? null : p.picture())
+                    .role(User.Role.USER)
+                    .build());
+            log.info("New user created through Google sign-in: {} ({})", user.getUsername(), user.getEmail());
+        } else {
+            log.info("User signed in with Google: {} ({})", user.getUsername(), user.getEmail());
+        }
+        if (!user.isEnabled()) throw new BadCredentialsException("This account is disabled.");
+        UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+        return buildAuthResponse(user, jwtUtil.generateAccessToken(userDetails), jwtUtil.generateRefreshToken(userDetails));
+    }
+
+    /** The Google client id the front-end needs to draw the button (empty = Google sign-in is switched off). */
+    public String googleClientId() { return googleVerifier.clientId(); }
 
     /**
      * Get current user profile by email.

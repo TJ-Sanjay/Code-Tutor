@@ -33,3 +33,6 @@
 .chat-input .textarea { max-height: 140px; min-height: 42px; border-radius: 12px; padding: 10px 12px; }
 .send { width: 42px; height: 42px; border-radius: 12px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, opacity .15s; }
 .send:hover:not(:disabled) { background: var(--accent-strong); } .send:disabled { opacity: .4; cursor: not-allowed; }
+
+.ai-badge { display: inline-block; margin-top: 8px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--text-faint); background: var(--surface-2, rgba(0,0,0,.05)); }
+.ai-badge.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }

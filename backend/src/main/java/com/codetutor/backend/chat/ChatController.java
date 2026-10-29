@@ -23,7 +23,7 @@ public class ChatController {
     public record ChatRequest(String query, ChatEngine.Selection selection) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record MessageView(Long id, String role, String content, JsonNode sources, JsonNode flow, JsonNode actions, String createdAt) {}
+    public record MessageView(Long id, String role, String content, JsonNode sources, JsonNode flow, JsonNode actions, String createdAt, Boolean ai) {}
 
     private final ProjectAccess access;
     private final ChatMessageRepository messages;
@@ -56,7 +56,7 @@ public class ChatController {
         String actions = a.actions() == null || a.actions().isEmpty() ? null : mapper.writeValueAsString(a.actions());
         // actions are stored inside the sources json envelope to avoid another column
         String envelope = mapper.writeValueAsString(java.util.Map.of("sources", mapper.readTree(sources),
-                "actions", actions == null ? mapper.createArrayNode() : mapper.readTree(actions)));
+                "actions", actions == null ? mapper.createArrayNode() : mapper.readTree(actions), "ai", a.llm()));
         ChatMessage saved = messages.save(new ChatMessage(ctx.project(), ctx.user(), "ASSISTANT", a.answer(), envelope, flow));
         return ApiResponse.success("Answer", view(saved));
     }
@@ -87,13 +87,15 @@ public class ChatController {
     private MessageView view(ChatMessage m) throws Exception {
         JsonNode sources = null;
         JsonNode actions = null;
+        Boolean ai = null;
         if (m.getSourcesJson() != null) {
             JsonNode env = mapper.readTree(m.getSourcesJson());
             sources = env.has("sources") ? env.get("sources") : env;
             actions = env.has("actions") ? env.get("actions") : null;
+            if (env.has("ai")) ai = env.get("ai").asBoolean();
         }
         JsonNode flow = m.getFlowJson() == null ? null : mapper.readTree(m.getFlowJson());
         return new MessageView(m.getId(), m.getRole(), m.getContent(), sources, flow, actions,
-                m.getCreatedAt() == null ? null : m.getCreatedAt().toString());
+                m.getCreatedAt() == null ? null : m.getCreatedAt().toString(), "ASSISTANT".equals(m.getRole()) ? ai : null);
     }
 }

@@ -101,8 +101,25 @@ public final class ExplainResolver {
 
     private static Explanation fieldExplanation(Knowledge k, ClassInfo c, FieldInfo f) {
         StringBuilder s = new StringBuilder("Field “" + f.name() + "” of type " + f.type() + " in " + c.name() + ".");
-        if (f.injected()) s.append(" It is injected by Spring (dependency injection), so ").append(c.name())
-                .append(" can use ").append(TypeUtil.raw(f.type())).append(" without creating it.");
+        if (f.injected()) {
+            if (c.attrs().get("framework") != null) {
+                s.append(" It is set in the initialiser, so ").append(c.name()).append(" keeps a ").append(TypeUtil.raw(f.type()))
+                        .append(" to work with.");
+            } else {
+                s.append(" It is injected by Spring (dependency injection), so ").append(c.name())
+                        .append(" can use ").append(TypeUtil.raw(f.type())).append(" without creating it.");
+            }
+        }
+        if (!f.annotations().isEmpty() && c.attrs().get("framework") != null) {
+            String t = f.annotations().get(0).name();
+            if (t.equals("ForeignKey") || t.equals("OneToOneField") || t.equals("ManyToManyField")) {
+                s.append(" It is a ").append(t.equals("ForeignKey") ? "many-to-one relationship (a foreign key column)"
+                        : t.equals("OneToOneField") ? "one-to-one relationship (a unique foreign key column)"
+                        : "many-to-many relationship (stored in a join table)").append('.');
+            } else if (t.endsWith("Field")) {
+                s.append(" A ").append(t).append(" column of the database table.");
+            }
+        }
         List<Ann> an = f.annotations();
         java.util.List<String> facts = new java.util.ArrayList<>();
         for (Ann a : an) facts.add(a.render());

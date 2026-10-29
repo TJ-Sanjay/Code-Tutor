@@ -1,0 +1,7 @@
+@echo off
+rem Copy this file to google.cmd and paste your Google OAuth client id. (google.cmd is ignored by git.)
+rem How to get it: https://console.cloud.google.com/  ->  APIs & Services  ->  Credentials  ->  Create credentials  ->  OAuth client ID
+rem   Application type: Web application
+rem   Authorized JavaScript origins: http://localhost:5173
+rem   (no redirect URI is needed)
+set GOOGLE_CLIENT_ID=PASTE_YOUR_CLIENT_ID_HERE.apps.googleusercontent.com

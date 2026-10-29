@@ -95,7 +95,31 @@ public class LlmClient {
         return t.isBlank() ? null : t;
     }
 
+    /** Tries the configured Gemini model first, then other free models, because a busy model answers HTTP 503. */
     private String gemini(String system, List<Turn> turns) throws Exception {
+        List<String> models = new java.util.ArrayList<>();
+        models.add(model.isBlank() ? "gemini-3.1-flash-lite" : model);
+        for (String f : List.of("gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.5-flash-lite")) {
+            if (!models.contains(f)) models.add(f);
+        }
+        Exception last = null;
+        long deadline = System.currentTimeMillis() + 45_000; // never keep the student waiting longer than this in total
+        for (String m : models) {
+            if (System.currentTimeMillis() > deadline) break;
+            try {
+                String r = geminiOnce(m, system, turns);
+                if (r != null) return r;
+            } catch (IllegalStateException | java.io.IOException e) {
+                last = e;
+                log.info("Gemini model {} is not available right now ({}); trying the next one", m,
+                        e.getMessage().substring(0, Math.min(40, e.getMessage().length())));
+            }
+        }
+        if (last != null) throw last;
+        return null;
+    }
+
+    private String geminiOnce(String m, String system, List<Turn> turns) throws Exception {
         ObjectNode body = mapper.createObjectNode();
         body.putObject("systemInstruction").putArray("parts").addObject().put("text", system);
         ArrayNode contents = body.putArray("contents");
@@ -104,18 +128,25 @@ public class LlmClient {
             c.put("role", t.role().equals("assistant") ? "model" : "user");
             c.putArray("parts").addObject().put("text", t.content());
         }
-        String m = model.isBlank() ? "gemini-1.5-flash" : model;
         String url = (baseUrl.isBlank() ? "https://generativelanguage.googleapis.com" : baseUrl) + "/v1beta/models/" + m
                 + ":generateContent?key=" + apiKey;
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(60))
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20))
                 .header("content-type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString())).build();
         JsonNode n = send(req);
-        String t = n.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("");
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode part : n.path("candidates").path(0).path("content").path("parts")) {
+            if (!part.path("thought").asBoolean(false)) sb.append(part.path("text").asText(""));
+        }
+        String t = sb.toString();
         return t.isBlank() ? null : t;
     }
 
     private JsonNode send(HttpRequest req) throws Exception {
         HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (res.statusCode() == 503) { // a busy model: one quick retry (429 = quota, retrying the same model will not help)
+            Thread.sleep(1500);
+            res = http.send(req, HttpResponse.BodyHandlers.ofString());
+        }
         if (res.statusCode() / 100 != 2) {
             throw new IllegalStateException("HTTP " + res.statusCode() + ": " + res.body().substring(0, Math.min(200, res.body().length())));
         }

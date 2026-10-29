@@ -1,7 +1,7 @@
 # CodeTutor
 
-Understand any **Spring Boot + React** codebase in minutes. Paste a GitHub link or upload a ZIP — CodeTutor reads the project,
-draws how it works and answers questions about it, with the exact lines highlighted.
+Understand any **Spring Boot, Django (+ Django REST Framework) or React** codebase in minutes. Paste a GitHub link or upload a ZIP —
+CodeTutor reads the project, draws how it works and answers questions about it, with the exact lines highlighted.
 
 ---
 
@@ -114,7 +114,7 @@ If an old H2 file (`backend/data/db/codetutor.mv.db`) exists, its data is copied
 ```
 GitHub URL / ZIP ─► validate ─► clone / extract (limits, skip junk) ─► scan files
    ─► tech stack (pom / package.json / Docker …)   ─► JavaParser AST (classes, methods, resolved calls)
-   ─► layers & modules ─► endpoints ─► security rules ─► DB schema (JPA + SQL) ─► React files & API calls
+   ─► layers & modules ─► endpoints ─► security rules ─► DB schema (JPA + SQL, Django models) ─► React files & API calls
    ─► knowledge graph (nodes + typed edges) ─► semantic chunks (module.layer.class.method) ─► vector index
 ```
 
@@ -128,7 +128,23 @@ GitHub URL / ZIP ─► validate ─► clone / extract (limits, skip junk) ─�
 * Java is parsed with **JavaParser**; the React side with regex-based analysis. **Embeddings are local TF-IDF vectors** (identifier splitting + synonyms) —
   no external service. The index is behind one class (`VectorIndex`), so neural embeddings / pgvector can be swapped in.
 * Background work uses an in-process thread pool (not Redis), with progress polling.
-* Deep analysis targets **Spring Boot + React** projects; other files are listed and viewable but not graphed.
+* Deep analysis targets **Spring Boot**, **Django / Django REST Framework** and **React** projects; other files are listed and viewable but not graphed.
+
+### Django support (`analysis/python/`)
+
+Python is read with a small indentation-aware parser (`PyParser`) — no Python install is needed. `PythonAnalyzer` + `DjangoSupport` produce the
+same model the Java analysis does, so every tab (architecture, data flow, database, APIs, dependencies, code explorer, chat) works unchanged:
+
+| Django concept | What CodeTutor builds from it |
+| --- | --- |
+| `models.py` (`models.Model`, abstract bases, `AbstractUser`) | Tables, columns, primary/foreign keys, one-to-one and many-to-many join tables → the ER diagram |
+| `urls.py` (`path`, `re_path`, `include`, DRF `router.register`) | The real endpoint list with full URL paths, path parameters and HTTP methods |
+| Function views, class-based views, generic views, DRF `ViewSet` / `@action` | Controllers and their handlers (inherited handlers are shown as built-in steps) |
+| `@login_required`, `LoginRequiredMixin`, `permission_classes`, `REST_FRAMEWORK` defaults | Per-endpoint access level (public / login / role / permission) |
+| `settings.py` (`MIDDLEWARE`, `AUTHENTICATION`, CSRF, CORS, `DEBUG`, `SECRET_KEY`) | The security flow: ordered middleware chain, mechanisms, and warnings |
+| `Model.objects.create(...)`, custom managers / querysets, services | Call graph and data flow down to the database table touched |
+
+Flask and FastAPI routes (`@app.route`, `@router.get`) are recognised too. A sample project lives in `backend/src/test/resources/django-sample`.
 
 ## 6. Tests
 

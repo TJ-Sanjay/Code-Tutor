@@ -113,7 +113,7 @@ export default function CodeViewer({ path, start, end, onFileLoaded }) {
       if (sel && !sel.isEmpty()) return;
       const pos = e.target.position;
       const wordInfo = model.getWordAtPosition(pos);
-      if (!wordInfo || e.target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT || !path.endsWith('.java')) { setPopup(null); return; }
+      if (!wordInfo || e.target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT || !/\.(java|py)$/.test(path)) { setPopup(null); return; }
       explain(pos, wordInfo.word, e.event.browserEvent.clientX - rect.left, e.event.browserEvent.clientY - rect.top);
     });
     ed.onDidChangeCursorSelection((e) => {

@@ -71,6 +71,10 @@ public class Describer {
     public static String stem(ClassInfo c) {
         String n = c.name().replaceAll("(ServiceImpl|Service|Controller|RestController|Repository|Repo|Dao|DAO|Impl|"
                 + "Dto|DTO|Request|Response|Entity|Mapper|Handler|Config|Configuration)$", "");
+        if (c.attrs() != null && c.attrs().get("framework") != null) {
+            n = n.replaceAll("(ViewSet|View|Serializer|ModelForm|Form|Admin|QuerySet|Manager|Middleware|Command|Permission|Mixin)$", "");
+            if (c.attrs().containsKey("moduleFile")) return c.name();
+        }
         if (n.isBlank()) n = c.name();
         return TypeUtil.humanize(n);
     }
@@ -79,6 +83,8 @@ public class Describer {
         if (c.doc() != null && !c.doc().isBlank() && !"TEST".equals(c.layer())) {
             return TypeUtil.firstSentence(c.doc());
         }
+        String py = pythonSummary(c);
+        if (py != null) return py;
         String stem = stem(c);
         List<String> injected = injectedNames(c);
         String uses = injected.isEmpty() ? "" : " It relies on " + joinNatural(injected) + ".";
@@ -143,6 +149,68 @@ public class Describer {
         }
     }
 
+    /** Summaries for Python / Django classes (null when the class is not Python or the generic text already fits). */
+    private String pythonSummary(ClassInfo c) {
+        String fw = c.attrs().get("framework");
+        if (fw == null) return null;
+        String kind = c.attrs().getOrDefault("djangoKind", "");
+        String file = c.file();
+        String stem = file.substring(file.lastIndexOf('/') + 1).replaceAll("\\.py$", "");
+        if ("true".equals(c.attrs().get("moduleFile"))) {
+            String fns = methodNames(c, 4);
+            int n = c.methods().size();
+            return switch (c.layer()) {
+                case "CONTROLLER" -> "Views module “" + c.name() + "”: " + n + " view function" + (n == 1 ? "" : "s") + " (" + fns
+                        + ") that receive HTTP requests and return pages or JSON.";
+                case "CONFIG" -> stem.equals("urls") ? "URL configuration: maps URL patterns to the views that handle them."
+                        : stem.startsWith("settings") || file.contains("/settings/")
+                        ? "Project settings: installed apps, middleware, database, authentication and security options."
+                        : "Configuration module (" + stem + ").";
+                case "APPLICATION" -> stem.equals("manage") ? "Django's command-line entry point: runs the development server, migrations and other management commands."
+                        : "Server entry point (" + stem + ") that exposes the application to a web server (WSGI / ASGI).";
+                case "SERVICE" -> "Service functions (" + fns + ") holding the business rules between the views and the data layer.";
+                case "SECURITY" -> "Authentication / permission helpers (" + fns + ").";
+                case "COMPONENT" -> "Signal handlers, tasks or middleware helpers (" + fns + ").";
+                case "UTIL" -> "Helper functions (" + fns + ").";
+                case "ENTITY" -> "Helper functions that live next to the models (" + fns + ").";
+                default -> "Python module with " + n + " function" + (n == 1 ? "" : "s") + (n == 0 ? "" : " (" + fns + ")") + ".";
+            };
+        }
+        String name = stem(c);
+        switch (kind) {
+            case "view" -> {
+                List<EndpointInfo> eps = k.endpointsOf(c);
+                String verbs = eps.stream().map(EndpointInfo::httpMethod).distinct().collect(Collectors.joining(" / "));
+                return "Class-based view for " + name + (eps.isEmpty() ? "" : ": serves " + verbs + " requests on "
+                        + eps.stream().map(EndpointInfo::path).distinct().limit(2).collect(Collectors.joining(", ")))
+                        + (eps.stream().allMatch(EndpointInfo::viewResponse) && !eps.isEmpty() ? " and renders HTML pages." : ".");
+            }
+            case "viewset" -> {
+                List<EndpointInfo> eps = k.endpointsOf(c);
+                return "REST API ViewSet for " + name + ": exposes " + eps.size() + " endpoint" + (eps.size() == 1 ? "" : "s")
+                        + " (list, create, retrieve, update, delete as available) backed by a serializer and the database.";
+            }
+            case "serializer" -> {
+                String model = c.attrs().get("meta.model");
+                return "Serializer for " + name + ": validates incoming data and converts " + (model == null ? "objects" : model.strip() + " records")
+                        + " to and from JSON. Fields: " + fieldNames(c, 5) + ".";
+            }
+            case "form" -> { return "Form for " + name + ": validates what the user submitted (" + fieldNames(c, 5) + ")."; }
+            case "admin" -> { return "Django admin configuration for " + name + ": how its records are listed and edited in the admin site."; }
+            case "appconfig" -> { return "App configuration: registers the app with Django and can run start-up code."; }
+            case "manager" -> {
+                String e = c.attrs().get("entityType");
+                return "Custom manager / queryset" + (e == null ? "" : " for " + e) + ": reusable database queries (" + methodNames(c, 4) + ").";
+            }
+            case "permission" -> { return "Permission class: decides whether a request may use a view (has_permission / has_object_permission)."; }
+            case "authentication" -> { return "Authentication class / backend: identifies the user behind each request."; }
+            case "middleware" -> { return "Middleware: runs around every request and response before and after the views."; }
+            case "command" -> { return "Management command: run it with `python manage.py " + TypeUtil.snake(c.name().replaceAll("Command$", "")) + "`."; }
+            case "schema" -> { return "Pydantic schema describing the data " + name + " (" + fieldNames(c, 5) + ")."; }
+            default -> { return null; }
+        }
+    }
+
     private String securityClassSummary(ClassInfo c) {
         String n = c.name().toLowerCase(Locale.ROOT);
         if ("true".equals(c.attrs().get("filter"))) {
@@ -168,8 +236,9 @@ public class Describer {
                 switch (a.name()) {
                     case "OneToMany" -> rel.add("has many " + TypeUtil.humanize(innerType(f.type())));
                     case "ManyToMany" -> rel.add("is linked many-to-many with " + TypeUtil.humanize(innerType(f.type())));
-                    case "ManyToOne" -> rel.add("belongs to a " + TypeUtil.humanize(f.type()));
-                    case "OneToOne" -> rel.add("is linked one-to-one with " + TypeUtil.humanize(f.type()));
+                    case "ManyToOne", "ForeignKey" -> rel.add("belongs to a " + TypeUtil.humanize(f.type()));
+                    case "OneToOne", "OneToOneField" -> rel.add("is linked one-to-one with " + TypeUtil.humanize(f.type()));
+                    case "ManyToManyField" -> rel.add("is linked many-to-many with " + TypeUtil.humanize(f.type()));
                     default -> { }
                 }
             }
@@ -218,7 +287,9 @@ public class Describer {
             sb.append(lowerFirst(verbPhrase(c, m))).append('.');
         } else if (m.constructor()) {
             String injected = m.params().stream().map(p -> TypeUtil.raw(p.type())).collect(Collectors.joining(", "));
-            sb.append("Constructor").append(injected.isEmpty() ? " creating a new " + c.name() + "."
+            boolean py = c.attrs().get("framework") != null;
+            sb.append(py ? "Initialiser" : "Constructor").append(injected.isEmpty() ? " creating a new " + c.name() + "."
+                    : py ? ": receives " + injected + " and keeps them for later use."
                     : ": receives " + injected + " from Spring (dependency injection) and stores them for later use.");
         } else {
             sb.append(verbPhrase(c, m)).append('.');
@@ -271,6 +342,7 @@ public class Describer {
             String e = c.attrs().get("entityType");
             if (e != null) return TypeUtil.humanize(e);
         }
+        if (c.attrs() != null && c.attrs().containsKey("moduleFile")) return "";
         String s = stem(c);
         return s.equals(TypeUtil.humanize(c.name())) && !"CONTROLLER".equals(c.layer()) ? "" : s;
     }
@@ -281,10 +353,12 @@ public class Describer {
         List<String> writes = new ArrayList<>();
         for (Call call : m.calls()) {
             ClassInfo target = k.classById.get(call.targetClass());
-            if (target == null || !"REPOSITORY".equals(target.layer())) continue;
-            String table = k.tableOfRepository(target);
+            if (target == null) continue;
+            boolean ormModel = "ENTITY".equals(target.layer()) && k.entityTable.containsKey(target.id());
+            if (!ormModel && !"REPOSITORY".equals(target.layer())) continue;
+            String table = ormModel ? k.entityTable.get(target.id()) : k.tableOfRepository(target);
             String label = table != null ? "table `" + table + "`" : target.name();
-            if (call.method().matches("^(save|delete|insert|update|remove|persist|merge|flush).*")) {
+            if (call.method().matches("^(save|delete|insert|update|remove|persist|merge|flush|create|bulk_|get_or_create|update_or_create).*")) {
                 if (!writes.contains(label)) writes.add(label);
             } else if (!reads.contains(label)) reads.add(label);
         }

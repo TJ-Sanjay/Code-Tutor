@@ -93,7 +93,7 @@ export default function Dashboard() {
       <main className="dash">
         <div className="dash-hero">
           <h1>Hi {user?.fullName?.split(' ')[0]}, what do you want to understand today?</h1>
-          <p>Import a Spring Boot + React project and get diagrams, data flows and answers — only you can see your projects.</p>
+          <p>Import a Spring Boot, Django or React project and get diagrams, data flows and answers — only you can see your projects.</p>
         </div>
 
         <ImportCard onCreated={() => { load(); refresh(); }} />

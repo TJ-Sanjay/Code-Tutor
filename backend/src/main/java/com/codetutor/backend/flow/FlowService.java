@@ -87,8 +87,10 @@ public class FlowService {
         // 2. controller + call tree
         int ctrlIdx = last;
         if (ctrl != null && handler != null) {
+            String router = "django".equals(ctrl.attrs().get("framework")) ? "Django's URL router sends the request here. "
+                    : "python".equals(ctrl.attrs().get("framework")) ? "The web framework routes the request here. " : "Spring routes the request here. ";
             ctrlIdx = add(steps, last, "CONTROLLER", ctrl.name() + "." + handler.name() + "()", ctrl.name(), ctrl.file(), handler.line(),
-                    handler.endLine(), "Spring routes the request here. " + d.methodSummary(ctrl, handler), "dispatches to", ctrl.id(),
+                    handler.endLine(), router + d.methodSummary(ctrl, handler), "dispatches to", ctrl.id(),
                     handler.id(), access);
             Set<String> path = new HashSet<>();
             path.add(handler.id());
@@ -134,12 +136,18 @@ public class FlowService {
                 String key = tc.id() + "#" + call.method();
                 if (!siblings.add(key)) continue;
                 boolean repo = "REPOSITORY".equals(tc.layer());
-                String kind = repo ? "REPOSITORY" : tc.layer();
+                String ormTable = !repo && "ENTITY".equals(tc.layer()) ? k.entityTable.get(tc.id()) : null;
+                boolean orm = ormTable != null;
+                String kind = repo || orm ? "REPOSITORY" : tc.layer();
                 String op = sqlOp(call.method());
-                int idx = add(steps, parent, kind, tc.name() + "." + call.method() + "()", repo ? "Spring Data JPA" : tc.name(),
-                        tc.file(), tc.line(), tc.line(), repo ? "Spring Data generates this query method: " + op + sqlTarget(tc) + "."
-                                : "Calls " + tc.name() + "." + call.method() + ".", verbLabel(call.method(), repo), tc.id(), null, null);
+                String title = orm && !call.method().matches("save|delete|refresh_from_db|full_clean")
+                        ? tc.name() + ".objects." + call.method() + "()" : tc.name() + "." + call.method() + "()";
+                int idx = add(steps, parent, kind, title, orm ? "Django ORM" : repo ? repoEngine(tc) : tc.name(),
+                        tc.file(), tc.line(), tc.line(), orm ? "The Django ORM turns this call into SQL: " + op + " on table `" + ormTable + "`."
+                                : repo ? repoEngine(tc) + " generates this query method: " + op + sqlTarget(tc) + "."
+                                : "Calls " + tc.name() + "." + call.method() + ".", verbLabel(call.method(), repo || orm), tc.id(), null, null);
                 if (repo) addTable(steps, idx, tc, call.method());
+                else if (orm) addTableNamed(steps, idx, ormTable, call.method());
                 continue;
             }
             MethodInfo target = k.methodById.get(call.targetMethodId());
@@ -171,9 +179,17 @@ public class FlowService {
         return m.loc() <= 3 && m.calls().isEmpty() && !Set.of("REPOSITORY", "CONTROLLER", "SERVICE").contains(owner.layer());
     }
 
+    private static String repoEngine(ClassInfo repo) {
+        return "python".equals(repo.attrs().get("framework")) || "django".equals(repo.attrs().get("framework")) ? "Django ORM" : "Spring Data JPA";
+    }
+
     private void addTable(List<FlowStep> steps, int parent, ClassInfo repo, String method) {
         String table = k.tableOfRepository(repo);
         if (table == null) return;
+        addTableNamed(steps, parent, table, method);
+    }
+
+    private void addTableNamed(List<FlowStep> steps, int parent, String table, String method) {
         Table t = k.tableByName.get(table);
         boolean write = isWrite(method);
         add(steps, parent, "TABLE", table, t == null ? "database table" : t.columns().size() + " columns",
@@ -183,11 +199,14 @@ public class FlowService {
     }
 
     private static boolean isWrite(String m) {
-        return m.matches("^(save|delete|insert|update|remove|persist|merge|flush|create|add|store).*");
+        return m.matches("^(save|delete|insert|update|remove|persist|merge|flush|create|add|store|bulk_|get_or_create|update_or_create).*");
     }
 
     private static String sqlOp(String m) {
         if (m.startsWith("save")) return "INSERT or UPDATE";
+        if (m.startsWith("create") || m.startsWith("bulk_create")) return "INSERT";
+        if (m.startsWith("update") || m.startsWith("bulk_update")) return "UPDATE";
+        if (m.startsWith("get_or_create") || m.startsWith("update_or_create")) return "SELECT, then INSERT or UPDATE";
         if (m.startsWith("delete") || m.startsWith("remove")) return "DELETE";
         if (m.startsWith("count")) return "SELECT COUNT";
         if (m.startsWith("exists")) return "SELECT EXISTS";
@@ -215,7 +234,12 @@ public class FlowService {
     }
 
     private String accessSentence(String access, Security sec, EndpointInfo ep) {
-        String rule = sec.rules().stream().filter(r -> matches(r, ep)).map(r -> r.pattern() + " → " + r.access()).findFirst()
+        ClassInfo owner = k.classById.get(ep.controller());
+        boolean python = owner != null && owner.attrs().get("framework") != null;
+        String rule = sec.rules().stream().filter(r -> r.pattern().equals(ep.path()) && (r.httpMethod() == null || r.httpMethod().equalsIgnoreCase(ep.httpMethod())))
+                .map(r -> r.pattern() + " → " + r.access()).findFirst()
+                .or(() -> python && ep.accessNote() != null ? java.util.Optional.of(ep.accessNote()) : java.util.Optional.empty())
+                .or(() -> sec.rules().stream().filter(r -> matches(r, ep)).map(r -> r.pattern() + " → " + r.access()).findFirst())
                 .orElse("default rule");
         return switch (access.split(":")[0]) {
             case "PUBLIC" -> "Matched rule “" + rule + "”: the request may continue without authentication.";
@@ -250,7 +274,7 @@ public class FlowService {
                 "Every HTTP request first meets the security layer before any controller code runs.", null, null, null, null);
         if (sec == null || !sec.enabled()) {
             add(steps, last, "CONTROLLER", "Controller", "no security configured", null, 0, 0,
-                    "No Spring Security configuration was detected, so requests go straight to the controllers.", "reaches", null, null, null);
+                    "No authentication / authorization configuration was detected, so requests go straight to the controllers.", "reaches", null, null, null);
             notes.add("There is no authentication or authorization in this project.");
             Flow f = new Flow("security", "Security flow", "none detected", "security", steps, notes, null);
             return new Flow(f.id(), f.title(), f.subtitle(), f.kind(), f.steps(), f.notes(), narrative(f));
@@ -268,7 +292,7 @@ public class FlowService {
             }
         }
         add(steps, last, "CONTROLLER", "Controller method runs", "access granted", null, 0, 0,
-                "If the rule allows the request, Spring dispatches it to the matching controller method.", "allowed", null, null, null);
+                "If the rule allows the request, the framework dispatches it to the matching controller / view method.", "allowed", null, null, null);
         add(steps, last, "RESPONSE", "401 / 403 response", "access denied", null, 0, 0,
                 "Otherwise the request is stopped here: 401 Unauthorized (not logged in) or 403 Forbidden (wrong role).", "denied", null, null, null);
         notes.addAll(sec.notes());
@@ -292,7 +316,16 @@ public class FlowService {
                     && (e.path().equals(path) || e.fullPath().equals(path))).toList();
             if (!exact.isEmpty()) return exact.subList(0, Math.min(max, exact.size()));
         }
-        Set<String> raw = new HashSet<>(VectorIndex.tokens(question));
+        List<String> toks = VectorIndex.tokens(question);
+        Set<String> raw = new HashSet<>(toks);
+        // "checks out" ↔ route "checkout": glue neighbouring words together (also without a plural s)
+        Set<String> compound = new HashSet<>();
+        for (int i = 0; i + 1 < toks.size(); i++) {
+            String a = toks.get(i), b = toks.get(i + 1);
+            compound.add(a + b);
+            if (a.endsWith("s") && a.length() > 3) compound.add(a.substring(0, a.length() - 1) + b);
+        }
+        raw.addAll(compound);
         Set<String> q = VectorIndex.expand(raw);
         Map<EndpointInfo, Double> score = new HashMap<>();
         for (EndpointInfo e : eps) {
@@ -309,6 +342,7 @@ public class FlowService {
                 best = Math.max(best, handlerTokens.contains(t) ? 1.2 : 0);
                 best = Math.max(best, pathTokens.contains(t) ? 1.0 : 0);
                 best = Math.max(best, ctrlTokens.contains(t) ? 0.3 : 0);
+                if (best > 0 && compound.contains(t) && !toks.contains(t)) best += 1.0; // two question words matched one name
                 if (best == 0) {
                     Set<String> syn = VectorIndex.expand(List.of(t));
                     for (String x : syn) {

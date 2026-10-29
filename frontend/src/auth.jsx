@@ -57,7 +57,14 @@ export function AuthProvider({ children }) {
     accept(res.data.data);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, register, logout: signOut, refresh }), [user, loading, login, register, signOut, refresh]);
+  /** "Continue with Google": the credential is Google's signed ID token; the server verifies it and signs the person in. */
+  const loginWithGoogle = useCallback(async (credential) => {
+    const res = await api.post('/auth/google', { credential });
+    accept(res.data.data);
+  }, []);
+
+  const value = useMemo(() => ({ user, loading, login, register, loginWithGoogle, logout: signOut, refresh }),
+    [user, loading, login, register, loginWithGoogle, signOut, refresh]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

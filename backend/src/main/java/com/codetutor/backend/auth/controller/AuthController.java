@@ -50,6 +50,19 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Login successful", response));
     }
 
+    public record GoogleRequest(@jakarta.validation.constraints.NotBlank String credential) {}
+
+    /** Tells the sign-in page whether to show "Continue with Google" (and with which client id). */
+    @GetMapping("/config")
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> config() {
+        return ResponseEntity.ok(ApiResponse.success("Auth config", java.util.Map.of("googleClientId", authService.googleClientId())));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> google(@Valid @RequestBody GoogleRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Login successful", authService.loginWithGoogle(request.credential())));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getCurrentUser(
             @AuthenticationPrincipal UserDetails userDetails

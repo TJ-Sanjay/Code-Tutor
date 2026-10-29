@@ -13,3 +13,5 @@ scratch_cp.txt
 .vscode/
 *.log
 .DS_Store
+llm.cmd
+google.cmd

@@ -60,10 +60,47 @@ public class ChatEngine {
         this.d = k.describer();
     }
 
+    // ═════════════════════════ typo tolerance ═════════════════════════
+
+    private static final List<String> VOCAB = List.of("endpoints", "endpoint", "database", "security", "authentication",
+            "authorization", "architecture", "dependencies", "controller", "controllers", "schema", "tables", "relationships",
+            "overview", "technology", "explain", "register", "password", "service", "repository", "checkout");
+
+    /** Fixes one-letter slips and swapped letters in the words the router relies on ("ednpoints" → "endpoints"). */
+    static String fixTypos(String q) {
+        StringBuilder out = new StringBuilder();
+        for (String w : q.split("(?<=\\W)|(?=\\W)")) {
+            String lw = w.toLowerCase(Locale.ROOT);
+            String fix = null;
+            if (lw.length() >= 5 && lw.matches("[a-z]+") && !VOCAB.contains(lw)) {
+                for (String v : VOCAB) if (Math.abs(v.length() - lw.length()) <= 1 && osa(lw, v) == 1) { fix = v; break; }
+            }
+            out.append(fix == null ? w : fix);
+        }
+        return out.toString();
+    }
+
+    /** Edit distance counting a swap of two neighbouring letters as one edit. */
+    private static int osa(String a, String b) {
+        int[][] d = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) d[i][0] = i;
+        for (int j = 0; j <= b.length(); j++) d[0][j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                d[i][j] = Math.min(Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + cost);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+                }
+            }
+        }
+        return d[a.length()][b.length()];
+    }
+
     // ═════════════════════════ entry ═════════════════════════
 
     public Answer answer(String question, Selection selection, List<LlmClient.Turn> history) {
-        String q = question == null ? "" : question.trim();
+        String q = fixTypos(question == null ? "" : question.trim());
         String ql = q.toLowerCase(Locale.ROOT);
         Draft draft;
         if (selection != null && selection.file() != null && selection.startLine() > 0) draft = fromSelection(q, selection);
@@ -89,6 +126,9 @@ public class ChatEngine {
         List<ClassInfo> classes = ranked.stream().map(ClassHit::c).toList();
         boolean strongClass = !ranked.isEmpty() && ranked.get(0).score() >= 6;
         List<MethodHit> methods = linkMethods(ql);
+
+        // "how is security implemented?" is about the security set-up, not a code search
+        if (sec && eps.isEmpty() && !strongClass && (ql.contains("secur") || ql.contains("authenticat") || ql.contains("authoriz"))) return security(ql);
 
         // "where is X implemented" with no exact class/method named → semantic search is the right tool
         if (FIND_WORDS.matcher(ql).find() && !strongClass && methods.isEmpty() && eps.isEmpty()) return search(q);
@@ -144,7 +184,7 @@ public class ChatEngine {
     private Draft security(String ql) {
         Security s = k.result.security();
         if (s == null || !s.enabled()) {
-            return new Draft("This project has **no Spring Security configuration**, so there is no login or permission check — every endpoint is open to everyone.\n\n"
+            return new Draft("This project has **no authentication or authorization configuration** (no Spring Security / Django auth settings or per-view checks), so there is no login or permission check — every endpoint is open to everyone.\n\n"
                     + "If you expected authentication, look for it outside this repository (an API gateway or proxy).", List.of(),
                     k.flows().securityFlow(), List.of(new Action("Open security flow", "flow", "security")), "SECURITY");
         }
@@ -205,7 +245,7 @@ public class ChatEngine {
     private Draft schema(String ql) {
         Schema s = k.result.schema();
         if (s == null || s.tables().isEmpty()) {
-            return new Draft("No database tables were detected (no JPA entities or `CREATE TABLE` scripts found).", List.of(), null, List.of(), "SCHEMA");
+            return new Draft("No database tables were detected (no JPA entities, Django models or `CREATE TABLE` scripts found).", List.of(), null, List.of(), "SCHEMA");
         }
         Set<String> qt = new HashSet<>(VectorIndex.tokens(ql));
         List<Table> named = s.tables().stream().filter(t -> {
@@ -531,9 +571,15 @@ public class ChatEngine {
 
     private String systemPrompt() {
         Overview o = k.result.overview();
-        return "You are CodeTutor, a friendly senior engineer who helps students understand an unfamiliar codebase.\n"
-                + "Answer ONLY from the verified analysis and code excerpts provided in the user message; never invent classes, files or behaviour.\n"
-                + "Write beginner-friendly markdown, at most ~350 words, using short paragraphs and bullet lists. Mention file names with line numbers like `OwnerController.java:42` when useful.\n"
+        return "You are CodeTutor, a friendly senior engineer who teaches students how an unfamiliar codebase works.\n"
+                + "Facts must come ONLY from the verified analysis and code excerpts in the user message; never invent classes, files, tables or behaviour. "
+                + "If something is not in the material, say so.\n"
+                + "The verified analysis is raw material, NOT the answer to copy. Do not paste its lists or tables back. Instead write your own explanation:\n"
+                + "1. Start with a direct 1-2 sentence answer in plain words.\n"
+                + "2. Explain WHY it is built this way and what each important part is for, using a short everyday analogy if it helps a beginner.\n"
+                + "3. Walk through the real code: quote the one or two most important lines from the excerpts in short code blocks and say what they do.\n"
+                + "4. Finish with one 'Good to know' point (a risk, a design choice or a missing piece you notice) and one follow-up question the student could ask next.\n"
+                + "Use markdown, at most ~450 words, and mention files with line numbers like `views.py:42`. Answer follow-up questions using the earlier conversation.\n"
                 + "Project: " + o.name() + ". " + o.summary();
     }
 
@@ -543,15 +589,15 @@ public class ChatEngine {
         StringBuilder ctx = new StringBuilder();
         ctx.append("Verified analysis (from static analysis of the code — trust this):\n").append(draft.text()).append("\n\n");
         ctx.append("Relevant code excerpts:\n");
-        int budget = 9000;
-        for (VectorIndex.Hit h : k.vectors().search(q, 5, c -> c.file() != null)) {
+        int budget = 14000;
+        for (VectorIndex.Hit h : k.vectors().search(q, 8, c -> c.file() != null)) {
             String text = h.chunk().text();
             if (text.length() > 1800) text = text.substring(0, 1800);
             if (budget - text.length() < 0) break;
             budget -= text.length();
             ctx.append("--- ").append(h.chunk().file()).append(':').append(h.chunk().startLine()).append('\n').append(text).append("\n");
         }
-        ctx.append("\nQuestion: ").append(q).append("\nAnswer the question using the material above.");
+        ctx.append("\nQuestion: ").append(q).append("\nExplain the answer in your own words, following the teaching structure from your instructions.");
         t.add(new LlmClient.Turn("user", ctx.toString()));
         return t;
     }

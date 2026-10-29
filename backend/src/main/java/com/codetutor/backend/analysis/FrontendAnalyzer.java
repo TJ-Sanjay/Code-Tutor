@@ -116,21 +116,28 @@ public class FrontendAnalyzer {
         else if (norm.startsWith("/api/") ) norm = norm.substring(4);
         if (norm.isEmpty()) norm = "/";
         String endpoint = matchEndpoint(method, norm, endpoints);
+        // Django / FastAPI projects usually keep the /api prefix in the route itself
+        if (endpoint == null && !norm.equals(path)) endpoint = matchEndpoint(method, path, endpoints);
         out.add(new ApiCall(method, norm, line, endpoint));
     }
 
     private String matchEndpoint(String method, String path, List<EndpointInfo> endpoints) {
-        String callPattern = path.replaceAll("\\{[^}]*}", "*");
+        String callPattern = trimSlash(path.replaceAll("\\{[^}]*}", "*"));
         EndpointInfo best = null;
         for (EndpointInfo e : endpoints) {
             if (!e.httpMethod().equals(method) && !"ANY".equals(e.httpMethod())) continue;
-            String epPattern = e.path().replaceAll("\\{[^}]*}", "*");
+            String epPattern = trimSlash(e.path().replaceAll("\\{[^}]*}", "*"));
             if (matcher.match(epPattern, callPattern) || epPattern.equals(callPattern)) {
                 best = e;
                 break;
             }
         }
         return best != null ? best.id() : null;
+    }
+
+    /** "/owners/" and "/owners" are the same route (Django APPEND_SLASH). */
+    private static String trimSlash(String p) {
+        return p.length() > 1 && p.endsWith("/") ? p.substring(0, p.length() - 1) : p;
     }
 
     private static int lineOf(String text, int idx) {

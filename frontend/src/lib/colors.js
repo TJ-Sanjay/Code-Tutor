@@ -70,7 +70,7 @@ export const LAYER_HELP = {
   FRONTEND: 'The React user interface',
   CONTROLLER: 'Receive web requests',
   SERVICE: 'Business logic',
-  COMPONENT: 'Helpers managed by Spring',
+  COMPONENT: 'Middleware, tasks and other helpers',
   REPOSITORY: 'Read and write the database',
   ENTITY: 'Data models',
   MODEL: 'Domain data classes',

@@ -131,6 +131,11 @@ function Message({ m, user, onSource, onAction }) {
       <span className="msg-av bot"><Bot size={15} /></span>
       <div className={`bubble bot ${m.error ? 'err' : ''}`}>
         <Markdown>{m.content}</Markdown>
+        {m.ai != null && !m.error && (
+          <span className={`ai-badge ${m.ai ? 'on' : ''}`} title={m.ai ? 'Written by the language model from the analysis of your code' : 'Built from the code analysis. The language model is off or was busy.'}>
+            {m.ai ? '✦ AI-written answer' : 'Built-in answer'}
+          </span>
+        )}
         {m.flow && m.flow.steps?.length > 1 && (
           <div className="chat-flow">
             <div className="chat-flow-head">

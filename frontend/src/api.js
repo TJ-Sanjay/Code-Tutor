@@ -18,7 +18,7 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     const url = err.config?.url || '';
-    const isAuthCall = url.includes('/auth/login') || url.includes('/auth/register');
+    const isAuthCall = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/google');
     if (err.response?.status === 401 && !isAuthCall) {
       // token expired / user no longer exists → the auth context signs the user out
       window.dispatchEvent(new Event('auth:expired'));

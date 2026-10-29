@@ -2,6 +2,7 @@ package com.codetutor.backend.analysis;
 
 import com.codetutor.backend.analysis.java.JavaAnalyzer;
 import com.codetutor.backend.analysis.model.AnalysisModel.*;
+import com.codetutor.backend.analysis.python.PythonAnalyzer;
 import com.codetutor.backend.common.exception.LimitExceededException;
 import com.codetutor.backend.explain.Describer;
 import com.codetutor.backend.scanner.service.FileFilterService;
@@ -56,19 +57,34 @@ public class AnalysisPipeline {
 
         progress.accept(40, "Parsing source code");
         List<String> javaFiles = files.stream().map(FileInfo::path).filter(p -> p.endsWith(".java")).toList();
-        JavaAnalyzer.Output java = new JavaAnalyzer().analyze(root, javaFiles, maxFileBytes, contextPath);
+        JavaAnalyzer.Output javaOut = new JavaAnalyzer().analyze(root, javaFiles, maxFileBytes, contextPath);
+        List<String> pyFiles = files.stream().map(FileInfo::path).filter(p -> p.endsWith(".py")).toList();
+        PythonAnalyzer.Output py = pyFiles.isEmpty() ? PythonAnalyzer.Output.empty()
+                : new PythonAnalyzer().analyze(root, pyFiles, files.stream().map(FileInfo::path).collect(Collectors.toSet()), maxFileBytes);
+        tech = tech.withExtras(py.frameworks(), py.databases(), py.tools());
+        // one combined view of the source code (Java and Python projects, or both)
+        List<ClassInfo> allClasses = new ArrayList<>(javaOut.classes());
+        allClasses.addAll(py.classes());
+        List<EndpointInfo> allEndpoints = new ArrayList<>(javaOut.endpoints());
+        allEndpoints.addAll(py.endpoints());
+        List<String> allErrors = new ArrayList<>(javaOut.errors());
+        allErrors.addAll(py.errors());
+        String basePackage = javaOut.basePackage() != null && !javaOut.basePackage().isBlank() ? javaOut.basePackage() : py.basePackage();
+        JavaAnalyzer.Output java = new JavaAnalyzer.Output(allClasses, allEndpoints, basePackage, allErrors);
 
         progress.accept(55, "Analysing security, APIs and database");
-        Security security = new SecurityAnalyzer().analyze(root, java.classes(), java.endpoints(), tech.libraries());
+        Security security = new SecurityAnalyzer().analyze(root, javaOut.classes(), javaOut.endpoints(), tech.libraries());
+        if (!security.enabled() && py.security() != null) security = py.security();
         List<EndpointInfo> endpoints = new ArrayList<>();
-        for (EndpointInfo e : java.endpoints()) {
+        for (EndpointInfo e : javaOut.endpoints()) {
             String access = SecurityAnalyzer.accessFor(security, e);
             String note = preAuthorize(java.classes(), e);
             endpoints.add(new EndpointInfo(e.id(), e.httpMethod(), e.path(), e.fullPath(), e.controller(), e.handler(), e.file(),
                     e.line(), e.params(), e.returns(), access, note, null, e.viewResponse()));
         }
+        endpoints.addAll(py.endpoints()); // Python endpoints already carry their own access level
         List<String> sqlFiles = files.stream().map(FileInfo::path).filter(p -> p.toLowerCase(Locale.ROOT).endsWith(".sql")).toList();
-        Schema schema = new SchemaAnalyzer().analyze(root, java.classes(), sqlFiles);
+        Schema schema = mergeSchemas(new SchemaAnalyzer().analyze(root, javaOut.classes(), sqlFiles), py.schema());
 
         progress.accept(65, "Analysing the front-end");
         List<String> jsFiles = files.stream().map(FileInfo::path).filter(AnalysisPipeline::isFrontendSource).toList();
@@ -131,6 +147,18 @@ public class AnalysisPipeline {
                 described.size(), schema.tables().size(), chunks.size());
         return new Result(overview0, summarised, withSummary, described, schema, modules, security, frontend, tech.libraries(),
                 graph.nodes(), graph.edges(), chunks);
+    }
+
+    /** Django models take precedence over a SQL dump / JPA table of the same name. */
+    private static Schema mergeSchemas(Schema base, Schema extra) {
+        if (extra == null || extra.tables().isEmpty()) return base;
+        Map<String, Table> tables = new LinkedHashMap<>();
+        for (Table t : base.tables()) tables.put(t.name(), t);
+        for (Table t : extra.tables()) tables.put(t.name(), t);
+        Map<String, Relation> rels = new LinkedHashMap<>();
+        for (Relation r : base.relations()) rels.putIfAbsent(r.fromTable() + "." + r.fromColumn() + ">" + r.toTable(), r);
+        for (Relation r : extra.relations()) rels.put(r.fromTable() + "." + r.fromColumn() + ">" + r.toTable(), r);
+        return new Schema(new ArrayList<>(tables.values()), new ArrayList<>(rels.values()));
     }
 
     // ───────────────────────── scan ─────────────────────────
